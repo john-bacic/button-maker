@@ -60,6 +60,35 @@
     </label>
 
     <label class="control">
+      <span>SVG Icon Markup</span>
+      <textarea
+        id="icon-svg-control"
+        rows="4"
+        placeholder='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M5 12h14"/></svg>'
+      ></textarea>
+    </label>
+
+    <label class="control">
+      <span>SVG Icon Color</span>
+      <input id="icon-color-control" type="color" value="#ffffff" />
+    </label>
+
+    <label class="control control-toggle">
+      <span>SVG Only</span>
+      <input id="svg-only-control" type="checkbox" />
+    </label>
+
+    <label class="control">
+      <span>Side Padding: <strong id="side-padding-value">20</strong>px</span>
+      <input id="side-padding-control" type="range" min="0" max="64" value="20" />
+    </label>
+
+    <label class="control">
+      <span>Icon/Text Gap: <strong id="icon-gap-value">9</strong>px</span>
+      <input id="icon-gap-control" type="range" min="0" max="40" value="9" />
+    </label>
+
+    <label class="control">
       <span>Font Family</span>
       <select id="text-font-control">
         <option value="Whitney" selected>Whitney</option>
@@ -157,6 +186,14 @@
     <div class="control-divider" role="separator" aria-hidden="true"></div>
 
     <p class="control-section-title">Size &amp; Shape</p>
+    <label class="control">
+      <span>Shape</span>
+      <select id="shape-control">
+        <option value="rectangle" selected>Rectangle</option>
+        <option value="circle">Circle</option>
+      </select>
+    </label>
+
     <label class="control control-toggle">
       <span>Hug Text</span>
       <input id="hug-text-control" type="checkbox" />
@@ -172,7 +209,7 @@
       <input id="height-control" type="range" min="24" max="140" value="80" />
     </label>
 
-    <label class="control">
+    <label id="radius-control-group" class="control">
       <span>Radius: <strong id="radius-value">48</strong>px</span>
       <input id="radius-control" type="range" min="0" max="80" value="48" />
     </label>

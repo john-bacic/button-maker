@@ -6,7 +6,10 @@
   --p: 10%;
   --glow-color: #ffffff;
   --text-color: #ffffff;
+  --icon-color: #ffffff;
   --text-size: 16px;
+  --side-padding: 20px;
+  --icon-gap: 9px;
   --text-font: "Whitney";
   --text-weight: normal;
   --border-glow-color: #ffffff;
@@ -64,8 +67,39 @@ button {
   font-size: var(--text-size);
   font-family: var(--text-font), sans-serif;
   font-weight: var(--text-weight);
+  padding-inline: var(--side-padding);
   letter-spacing: 0.04em;
   cursor: pointer;
+}
+
+.button-content {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--icon-gap);
+}
+
+.border-gradient.shape-circle {
+  padding-inline: 0;
+}
+
+.border-gradient.shape-circle .button-content {
+  width: 100%;
+  justify-content: center;
+}
+
+.button-icon {
+  width: 1.05em;
+  height: 1.05em;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--icon-color);
+}
+
+.button-icon svg {
+  width: 100%;
+  height: 100%;
+  display: block;
 }
 
 html,
@@ -193,12 +227,20 @@ body {
 }
 
 .control input[type="text"],
-.control select {
+.control select,
+.control textarea {
   padding: 0.45rem 0.55rem;
   border: 1px solid #d1d5db;
   border-radius: 0.45rem;
   background: #ffffff;
   color: #111827;
+}
+
+.control textarea {
+  resize: vertical;
+  min-height: 5.2rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+  font-size: 0.74rem;
 }
 
 .control input[type="color"] {

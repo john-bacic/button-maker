@@ -8,6 +8,7 @@
  * @module
  */
 
+import type * as svgCache from "../svgCache.js";
 import type * as variations from "../variations.js";
 
 import type {
@@ -17,6 +18,7 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  svgCache: typeof svgCache;
   variations: typeof variations;
 }>;
 

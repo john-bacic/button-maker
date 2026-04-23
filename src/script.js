@@ -14,6 +14,11 @@ document.addEventListener("DOMContentLoaded", () => {
 
   const controls = {
     text: document.querySelector("#text-control"),
+    iconSvg: document.querySelector("#icon-svg-control"),
+    iconColor: document.querySelector("#icon-color-control"),
+    svgOnly: document.querySelector("#svg-only-control"),
+    sidePadding: document.querySelector("#side-padding-control"),
+    iconGap: document.querySelector("#icon-gap-control"),
     textFont: document.querySelector("#text-font-control"),
     bg: document.querySelector("#bg-control"),
     pageBg: document.querySelector("#page-bg-control"),
@@ -26,6 +31,7 @@ document.addEventListener("DOMContentLoaded", () => {
     borderGlowSize: document.querySelector("#border-glow-size-control"),
     borderThickness: document.querySelector("#border-thickness-control"),
     hugText: document.querySelector("#hug-text-control"),
+    shape: document.querySelector("#shape-control"),
     width: document.querySelector("#width-control"),
     height: document.querySelector("#height-control"),
     radius: document.querySelector("#radius-control"),
@@ -53,6 +59,8 @@ document.addEventListener("DOMContentLoaded", () => {
     height: document.querySelector("#height-value"),
     radius: document.querySelector("#radius-value"),
     fontSize: document.querySelector("#font-size-value"),
+    sidePadding: document.querySelector("#side-padding-value"),
+    iconGap: document.querySelector("#icon-gap-value"),
     borderGlowSize: document.querySelector("#border-glow-size-value"),
     borderThickness: document.querySelector("#border-thickness-value"),
     glowSize: document.querySelector("#glow-size-value"),
@@ -68,6 +76,7 @@ document.addEventListener("DOMContentLoaded", () => {
     matchBorderGlowColor: document.querySelector("#match-border-glow-color-group"),
     borderGlowSize: document.querySelector("#border-glow-size-group"),
     width: document.querySelector("#width-control-group"),
+    radius: document.querySelector("#radius-control-group"),
   };
 
   const setBorderGlowColorDisabledState = (isDisabled) => {
@@ -90,6 +99,11 @@ document.addEventListener("DOMContentLoaded", () => {
     controlGroups.width.classList.toggle("is-disabled", isDisabled);
   };
 
+  const setRadiusDisabledState = (isDisabled) => {
+    controls.radius.disabled = isDisabled;
+    controlGroups.radius.classList.toggle("is-disabled", isDisabled);
+  };
+
   const resolveFontSettings = (fontSelection) => {
     if (fontSelection === "Whitney Bold") {
       return { family: "Whitney", weight: "700" };
@@ -98,8 +112,116 @@ document.addEventListener("DOMContentLoaded", () => {
     return { family: fontSelection, weight: "normal" };
   };
 
+  const sanitizeSvgMarkup = (rawSvg) => {
+    const markup = String(rawSvg || "").trim();
+    if (!markup) return "";
+
+    const template = document.createElement("template");
+    template.innerHTML = markup;
+    const svg = template.content.querySelector("svg");
+    if (!svg) return "";
+
+    const disallowed = ["script", "style", "iframe", "object", "embed", "foreignObject"];
+    for (const selector of disallowed) {
+      svg.querySelectorAll(selector).forEach((node) => node.remove());
+    }
+
+    const parseDimension = (raw) => {
+      const value = String(raw || "").trim();
+      const match = value.match(/^([0-9]*\.?[0-9]+)/);
+      return match ? Number(match[1]) : NaN;
+    };
+
+    const widthValue = parseDimension(svg.getAttribute("width"));
+    const heightValue = parseDimension(svg.getAttribute("height"));
+    if (!svg.hasAttribute("viewBox") && Number.isFinite(widthValue) && Number.isFinite(heightValue)) {
+      svg.setAttribute("viewBox", `0 0 ${widthValue} ${heightValue}`);
+    }
+
+    // Let CSS fully control icon box sizing.
+    svg.removeAttribute("width");
+    svg.removeAttribute("height");
+    svg.setAttribute("preserveAspectRatio", "xMidYMid meet");
+
+    const walk = document.createTreeWalker(svg, NodeFilter.SHOW_ELEMENT);
+    while (walk.nextNode()) {
+      const el = walk.currentNode;
+      for (const attr of Array.from(el.attributes)) {
+        const attrName = attr.name.toLowerCase();
+        const attrValue = String(attr.value || "");
+        if (attrName.startsWith("on")) {
+          el.removeAttribute(attr.name);
+          continue;
+        }
+        if ((attrName === "href" || attrName === "xlink:href") && attrValue.trim().startsWith("javascript:")) {
+          el.removeAttribute(attr.name);
+        }
+      }
+
+      // Make icon color controllable from CSS by normalizing paint attributes.
+      const normalizePaint = (value) => {
+        const trimmed = String(value || "").trim().toLowerCase();
+        if (!trimmed || trimmed === "none" || trimmed.startsWith("url(")) return value;
+        return "currentColor";
+      };
+
+      if (el.hasAttribute("fill")) {
+        el.setAttribute("fill", normalizePaint(el.getAttribute("fill")));
+      }
+      if (el.hasAttribute("stroke")) {
+        el.setAttribute("stroke", normalizePaint(el.getAttribute("stroke")));
+      }
+
+      const inlineStyle = el.getAttribute("style");
+      if (inlineStyle) {
+        const updatedStyle = inlineStyle
+          .replace(/fill\s*:\s*([^;]+)/gi, (match, paint) => {
+            const normalized = normalizePaint(paint);
+            return normalized === paint ? match : `fill:${normalized}`;
+          })
+          .replace(/stroke\s*:\s*([^;]+)/gi, (match, paint) => {
+            const normalized = normalizePaint(paint);
+            return normalized === paint ? match : `stroke:${normalized}`;
+          });
+        el.setAttribute("style", updatedStyle);
+      }
+    }
+
+    return svg.outerHTML;
+  };
+
+  const renderButtonContent = (textValue, rawSvg, svgOnly) => {
+    const text = String(textValue ?? "");
+    const safeSvg = sanitizeSvgMarkup(rawSvg);
+
+    const content = document.createElement("span");
+    content.className = "button-content";
+
+    if (safeSvg) {
+      const icon = document.createElement("span");
+      icon.className = "button-icon";
+      icon.setAttribute("aria-hidden", "true");
+      icon.innerHTML = safeSvg;
+      content.appendChild(icon);
+    }
+
+    if (!svgOnly || !safeSvg) {
+      const label = document.createElement("span");
+      label.className = "button-label";
+      label.textContent = text || " ";
+      content.appendChild(label);
+    }
+
+    button.replaceChildren(content);
+  };
+
   const defaults = {
     text: "WHY CHOOSE US",
+    iconSvg: "",
+    iconColor: "#ffffff",
+    svgOnly: false,
+    sidePadding: 20,
+    iconGap: 9,
     textFont: "Whitney",
     bg: "#171717",
     pageBg: "#171717",
@@ -112,6 +234,7 @@ document.addEventListener("DOMContentLoaded", () => {
     borderGlowSize: 18,
     borderThickness: 1,
     hugText: false,
+    shape: "rectangle",
     width: 250,
     height: 80,
     radius: 48,
@@ -126,6 +249,11 @@ document.addEventListener("DOMContentLoaded", () => {
 
   const getStateFromControls = () => ({
     text: controls.text.value,
+    iconSvg: controls.iconSvg.value,
+    iconColor: controls.iconColor.value,
+    svgOnly: controls.svgOnly.checked,
+    sidePadding: Number(controls.sidePadding.value),
+    iconGap: Number(controls.iconGap.value),
     textFont: controls.textFont.value,
     bg: controls.bg.value,
     pageBg: controls.pageBg.value,
@@ -138,6 +266,7 @@ document.addEventListener("DOMContentLoaded", () => {
     borderGlowSize: Number(controls.borderGlowSize.value),
     borderThickness: Number(controls.borderThickness.value),
     hugText: controls.hugText.checked,
+    shape: controls.shape.value,
     width: Number(controls.width.value),
     height: Number(controls.height.value),
     radius: Number(controls.radius.value),
@@ -234,6 +363,38 @@ document.addEventListener("DOMContentLoaded", () => {
     controls.variationLastSaved.textContent = `Last saved: ${label || "--"}`;
   };
 
+  const syncShapeLayout = () => {
+    const isCircle = controls.shape.value === "circle";
+    button.classList.toggle("shape-circle", isCircle);
+
+    if (isCircle) {
+      controls.hugText.checked = false;
+      controls.hugText.disabled = true;
+      setWidthDisabledState(true);
+      setRadiusDisabledState(true);
+
+      const size = Number(controls.height.value);
+      controls.width.value = String(size);
+      valueLabels.width.textContent = String(size);
+      button.style.width = "";
+      button.style.setProperty("--btn-width", `${size}px`);
+      button.style.setProperty("--btn-radius", "9999px");
+      return;
+    }
+
+    controls.hugText.disabled = false;
+    setRadiusDisabledState(false);
+    setWidthDisabledState(Boolean(controls.hugText.checked));
+    button.style.setProperty("--btn-radius", `${controls.radius.value}px`);
+
+    if (controls.hugText.checked) {
+      button.style.width = "fit-content";
+    } else {
+      button.style.width = "";
+      button.style.setProperty("--btn-width", `${controls.width.value}px`);
+    }
+  };
+
   const syncVariationsFromCloud = async () => {
     try {
       const cloudRows = await convex.query("variations:list", {});
@@ -295,11 +456,16 @@ document.addEventListener("DOMContentLoaded", () => {
     setVariationLastSaved(undefined);
   };
 
-  const applyState = (state) => {
+  const applyState = (incomingState) => {
+    const state = { ...defaults, ...incomingState };
     const fontSettings = resolveFontSettings(state.textFont);
 
     controls.text.value = state.text;
     controls.textFont.value = state.textFont;
+    controls.iconColor.value = state.iconColor;
+    controls.svgOnly.checked = Boolean(state.svgOnly);
+    controls.sidePadding.value = String(state.sidePadding);
+    controls.iconGap.value = String(state.iconGap);
     controls.bg.value = state.bg;
     controls.pageBg.value = state.pageBg;
     controls.glowColor.value = state.glowColor;
@@ -313,6 +479,7 @@ document.addEventListener("DOMContentLoaded", () => {
     controls.borderGlowSize.value = String(state.borderGlowSize);
     controls.borderThickness.value = String(state.borderThickness);
     controls.hugText.checked = Boolean(state.hugText);
+    controls.shape.value = state.shape;
     controls.width.value = String(state.width);
     controls.height.value = String(state.height);
     controls.radius.value = String(state.radius);
@@ -324,16 +491,19 @@ document.addEventListener("DOMContentLoaded", () => {
     controls.pressedScale.value = String(state.pressedScale);
     controls.pressedOpacity.value = String(state.pressedOpacity);
 
-    button.textContent = state.text || " ";
+    controls.iconSvg.value = state.iconSvg;
+    renderButtonContent(state.text, state.iconSvg, Boolean(state.svgOnly));
     button.style.setProperty("--c", state.bg);
     button.style.setProperty("--text-font", `"${fontSettings.family}"`);
     button.style.setProperty("--text-weight", fontSettings.weight);
     button.style.setProperty("--glow-color", state.glowColor);
     button.style.setProperty("--text-color", state.textColor);
+    button.style.setProperty("--icon-color", state.iconColor);
+    button.style.setProperty("--side-padding", `${state.sidePadding}px`);
+    button.style.setProperty("--icon-gap", `${state.iconGap}px`);
     button.style.setProperty("--text-size", `${state.fontSize}px`);
-    button.style.setProperty("--btn-width", `${state.width}px`);
     button.style.setProperty("--btn-height", `${state.height}px`);
-    button.style.setProperty("--btn-radius", `${state.radius}px`);
+    button.style.setProperty("--btn-width", `${state.width}px`);
     button.style.setProperty("--p", `${state.glowSize}%`);
     button.style.setProperty("--hover-lift", `${state.hoverLift}px`);
     button.style.setProperty("--hover-scale", String(state.hoverScale));
@@ -351,19 +521,14 @@ document.addEventListener("DOMContentLoaded", () => {
     setBorderGlowColorDisabledState(!state.borderGlow || controls.matchBorderGlowColor.checked);
     setBorderGlowSizeDisabledState(!state.borderGlow);
     document.body.style.backgroundColor = state.pageBg;
-    setWidthDisabledState(Boolean(state.hugText));
-    if (state.hugText) {
-      button.style.width = "fit-content";
-      button.style.paddingInline = "1.2em";
-    } else {
-      button.style.width = "";
-      button.style.paddingInline = "";
-    }
+    syncShapeLayout();
 
     valueLabels.width.textContent = String(state.width);
     valueLabels.height.textContent = String(state.height);
     valueLabels.radius.textContent = String(state.radius);
     valueLabels.fontSize.textContent = String(state.fontSize);
+    valueLabels.sidePadding.textContent = String(state.sidePadding);
+    valueLabels.iconGap.textContent = String(state.iconGap);
     valueLabels.borderGlowSize.textContent = String(state.borderGlowSize);
     valueLabels.borderThickness.textContent = String(state.borderThickness);
     valueLabels.glowSize.textContent = String(state.glowSize);
@@ -385,6 +550,15 @@ document.addEventListener("DOMContentLoaded", () => {
 
       return {
         text: typeof saved.text === "string" ? saved.text : defaults.text,
+        iconSvg: typeof saved.iconSvg === "string" ? saved.iconSvg : defaults.iconSvg,
+        iconColor: typeof saved.iconColor === "string" ? saved.iconColor : defaults.iconColor,
+        svgOnly: Boolean(saved.svgOnly),
+        sidePadding: Number.isFinite(Number(saved.sidePadding))
+          ? Number(saved.sidePadding)
+          : defaults.sidePadding,
+        iconGap: Number.isFinite(Number(saved.iconGap))
+          ? Number(saved.iconGap)
+          : defaults.iconGap,
         textFont: typeof saved.textFont === "string" ? saved.textFont : defaults.textFont,
         bg: typeof saved.bg === "string" ? saved.bg : defaults.bg,
         pageBg: typeof saved.pageBg === "string" ? saved.pageBg : defaults.pageBg,
@@ -409,6 +583,7 @@ document.addEventListener("DOMContentLoaded", () => {
           ? Number(saved.borderThickness)
           : defaults.borderThickness,
         hugText: Boolean(saved.hugText),
+        shape: saved.shape === "circle" ? "circle" : defaults.shape,
         width: Number.isFinite(Number(saved.width)) ? Number(saved.width) : defaults.width,
         height: Number.isFinite(Number(saved.height)) ? Number(saved.height) : defaults.height,
         radius: Number.isFinite(Number(saved.radius)) ? Number(saved.radius) : defaults.radius,
@@ -440,7 +615,36 @@ document.addEventListener("DOMContentLoaded", () => {
   let variations = loadVariations();
 
   controls.text.addEventListener("input", () => {
-    button.textContent = controls.text.value || " ";
+    renderButtonContent(controls.text.value, controls.iconSvg.value, controls.svgOnly.checked);
+    saveState();
+  });
+
+  controls.iconSvg.addEventListener("input", () => {
+    renderButtonContent(controls.text.value, controls.iconSvg.value, controls.svgOnly.checked);
+    saveState();
+  });
+
+  controls.svgOnly.addEventListener("change", () => {
+    renderButtonContent(controls.text.value, controls.iconSvg.value, controls.svgOnly.checked);
+    saveState();
+  });
+
+  controls.iconColor.addEventListener("input", () => {
+    button.style.setProperty("--icon-color", controls.iconColor.value);
+    saveState();
+  });
+
+  controls.sidePadding.addEventListener("input", () => {
+    const value = controls.sidePadding.value;
+    button.style.setProperty("--side-padding", `${value}px`);
+    valueLabels.sidePadding.textContent = value;
+    saveState();
+  });
+
+  controls.iconGap.addEventListener("input", () => {
+    const value = controls.iconGap.value;
+    button.style.setProperty("--icon-gap", `${value}px`);
+    valueLabels.iconGap.textContent = value;
     saveState();
   });
 
@@ -526,20 +730,17 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 
   controls.hugText.addEventListener("change", () => {
-    setWidthDisabledState(controls.hugText.checked);
-    if (controls.hugText.checked) {
-      button.style.width = "fit-content";
-      button.style.paddingInline = "1.2em";
-    } else {
-      button.style.width = "";
-      button.style.paddingInline = "";
-      button.style.setProperty("--btn-width", `${controls.width.value}px`);
-    }
+    syncShapeLayout();
+    saveState();
+  });
+
+  controls.shape.addEventListener("change", () => {
+    syncShapeLayout();
     saveState();
   });
 
   controls.width.addEventListener("input", () => {
-    if (controls.hugText.checked) return;
+    if (controls.hugText.checked || controls.shape.value === "circle") return;
     const value = controls.width.value;
     button.style.setProperty("--btn-width", `${value}px`);
     valueLabels.width.textContent = value;
@@ -549,11 +750,17 @@ document.addEventListener("DOMContentLoaded", () => {
   controls.height.addEventListener("input", () => {
     const value = controls.height.value;
     button.style.setProperty("--btn-height", `${value}px`);
+    if (controls.shape.value === "circle") {
+      controls.width.value = value;
+      button.style.setProperty("--btn-width", `${value}px`);
+      valueLabels.width.textContent = value;
+    }
     valueLabels.height.textContent = value;
     saveState();
   });
 
   controls.radius.addEventListener("input", () => {
+    if (controls.shape.value === "circle") return;
     const value = controls.radius.value;
     button.style.setProperty("--btn-radius", `${value}px`);
     valueLabels.radius.textContent = value;
@@ -616,9 +823,14 @@ document.addEventListener("DOMContentLoaded", () => {
 
   const buildCssSnippet = () => {
     const fontSettings = resolveFontSettings(controls.textFont.value);
-    const widthCss = controls.hugText.checked
-      ? "  width: fit-content;\n  padding-inline: 1.2em;"
-      : "  width: var(--btn-width);";
+    const widthCss =
+      controls.shape.value === "circle"
+        ? `  width: ${controls.height.value}px;`
+        : controls.hugText.checked
+          ? "  width: fit-content;"
+          : "  width: var(--btn-width);";
+    const radiusCss =
+      controls.shape.value === "circle" ? "9999px" : `${controls.radius.value}px`;
     const exportBorderGlowColor = controls.matchBorderGlowColor.checked
       ? "var(--glow-color)"
       : controls.borderGlowColor.value;
@@ -630,6 +842,9 @@ document.addEventListener("DOMContentLoaded", () => {
   --c: ${controls.bg.value};
   --text-font: "${fontSettings.family}";
   --text-weight: ${fontSettings.weight};
+  --icon-color: ${controls.iconColor.value};
+  --side-padding: ${controls.sidePadding.value}px;
+  --icon-gap: ${controls.iconGap.value}px;
   --text-size: ${controls.fontSize.value}px;
   --hover-lift: ${controls.hoverLift.value}px;
   --hover-scale: ${Number(controls.hoverScale.value).toFixed(2)};
@@ -640,11 +855,12 @@ document.addEventListener("DOMContentLoaded", () => {
   --glow-color: ${controls.glowColor.value};
   --text-color: ${controls.textColor.value};
   --border-thickness: ${controls.borderThickness.value}px;
-  --btn-width: ${controls.width.value}px;
+  --btn-width: ${controls.shape.value === "circle" ? controls.height.value : controls.width.value}px;
   --btn-height: ${controls.height.value}px;
-  --btn-radius: ${controls.radius.value}px;
+  --btn-radius: ${radiusCss};
 ${widthCss}
   height: var(--btn-height);
+  padding-inline: var(--side-padding);
   color: var(--text-color);
   font-size: var(--text-size);
   font-family: var(--text-font), sans-serif;
