@@ -11,6 +11,7 @@ document.addEventListener("DOMContentLoaded", () => {
     bg: document.querySelector("#bg-control"),
     pageBg: document.querySelector("#page-bg-control"),
     glowColor: document.querySelector("#glow-color-control"),
+    textColor: document.querySelector("#text-color-control"),
     borderGlow: document.querySelector("#border-glow-control"),
     borderGlowColor: document.querySelector("#border-glow-color-control"),
     matchBorderGlowColor: document.querySelector("#match-border-glow-color-control"),
@@ -72,6 +73,7 @@ document.addEventListener("DOMContentLoaded", () => {
     bg: "#171717",
     pageBg: "#171717",
     glowColor: "#ffffff",
+    textColor: "#ffffff",
     borderGlow: false,
     borderGlowColor: "#ffffff",
     matchBorderGlowColor: true,
@@ -90,6 +92,7 @@ document.addEventListener("DOMContentLoaded", () => {
     bg: controls.bg.value,
     pageBg: controls.pageBg.value,
     glowColor: controls.glowColor.value,
+    textColor: controls.textColor.value,
     borderGlow: controls.borderGlow.checked,
     borderGlowColor: controls.borderGlowColor.value,
     matchBorderGlowColor: controls.matchBorderGlowColor.checked,
@@ -152,6 +155,7 @@ document.addEventListener("DOMContentLoaded", () => {
     controls.bg.value = state.bg;
     controls.pageBg.value = state.pageBg;
     controls.glowColor.value = state.glowColor;
+    controls.textColor.value = state.textColor;
     controls.borderGlow.checked = Boolean(state.borderGlow);
     controls.matchBorderGlowColor.checked = Boolean(state.matchBorderGlowColor);
     controls.borderGlowColor.value = controls.matchBorderGlowColor.checked
@@ -169,6 +173,7 @@ document.addEventListener("DOMContentLoaded", () => {
     button.textContent = state.text || " ";
     button.style.setProperty("--c", state.bg);
     button.style.setProperty("--glow-color", state.glowColor);
+    button.style.setProperty("--text-color", state.textColor);
     button.style.setProperty("--btn-width", `${state.width}px`);
     button.style.setProperty("--btn-height", `${state.height}px`);
     button.style.setProperty("--btn-radius", `${state.radius}px`);
@@ -215,6 +220,7 @@ document.addEventListener("DOMContentLoaded", () => {
         bg: typeof saved.bg === "string" ? saved.bg : defaults.bg,
         pageBg: typeof saved.pageBg === "string" ? saved.pageBg : defaults.pageBg,
         glowColor: typeof saved.glowColor === "string" ? saved.glowColor : defaults.glowColor,
+        textColor: typeof saved.textColor === "string" ? saved.textColor : defaults.textColor,
         borderGlow: Boolean(saved.borderGlow),
         borderGlowColor:
           typeof saved.borderGlowColor === "string"
@@ -268,6 +274,11 @@ document.addEventListener("DOMContentLoaded", () => {
       controls.borderGlowColor.value = controls.glowColor.value;
       button.style.setProperty("--border-glow-color", controls.glowColor.value);
     }
+    saveState();
+  });
+
+  controls.textColor.addEventListener("input", () => {
+    button.style.setProperty("--text-color", controls.textColor.value);
     saveState();
   });
 
@@ -382,13 +393,14 @@ document.addEventListener("DOMContentLoaded", () => {
   --c: ${controls.bg.value};
   --p: ${controls.glowSize.value}%;
   --glow-color: ${controls.glowColor.value};
+  --text-color: ${controls.textColor.value};
   --border-thickness: ${controls.borderThickness.value}px;
   --btn-width: ${controls.width.value}px;
   --btn-height: ${controls.height.value}px;
   --btn-radius: ${controls.radius.value}px;
 ${widthCss}
   height: var(--btn-height);
-  color: white;
+  color: var(--text-color);
   border: var(--border-thickness) solid transparent;
   border-radius: var(--btn-radius);
   background: linear-gradient(var(--c), var(--c)) padding-box,

@@ -4,6 +4,7 @@
   --c: #171717;
   --p: 10%;
   --glow-color: #ffffff;
+  --text-color: #ffffff;
   --border-glow-color: #ffffff;
   --border-glow-size: 18px;
   --border-thickness: 1px;
@@ -31,7 +32,7 @@
 }
 
 button {
-  color: white;
+  color: var(--text-color);
   font-size: 1rem;
   font-family: "Inter", sans-serif;
   letter-spacing: 0.04em;
