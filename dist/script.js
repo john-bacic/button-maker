@@ -11,8 +11,76 @@ document.addEventListener("DOMContentLoaded", () => {
   const CONVEX_URL = window.CONVEX_URL || "https://formal-rat-848.convex.cloud";
   const convex = new ConvexHttpClient(CONVEX_URL);
 
+  const parsePageBgToRgb = (raw) => {
+    const s = String(raw || "").trim();
+    const hex = s.match(/^#([\da-f]{3}|[\da-f]{6})$/i);
+    if (hex) {
+      let h = hex[1];
+      if (h.length === 3) {
+        h = h
+          .split("")
+          .map((ch) => ch + ch)
+          .join("");
+      }
+      return {
+        r: parseInt(h.slice(0, 2), 16),
+        g: parseInt(h.slice(2, 4), 16),
+        b: parseInt(h.slice(4, 6), 16),
+      };
+    }
+    const rgb = s.match(/^rgba?\(\s*([\d.]+)\s*,\s*([\d.]+)\s*,\s*([\d.]+)/i);
+    if (rgb) {
+      return { r: Number(rgb[1]), g: Number(rgb[2]), b: Number(rgb[3]) };
+    }
+    return null;
+  };
+
+  const previewBackgroundLuminance = (r, g, b) => {
+    const lin = (v) => {
+      const x = v / 255;
+      return x <= 0.03928 ? x / 12.92 : Math.pow((x + 0.055) / 1.055, 2.4);
+    };
+    return 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b);
+  };
+
+  const syncPreviewDotGrid = (pageBgCss) => {
+    const root = document.body;
+    if (!root) return;
+    const fallback = "#0a0a0a";
+    const surface = String(pageBgCss || "").trim() || fallback;
+    const rgb = parsePageBgToRgb(surface);
+    let dotRgba = "rgba(255, 255, 255, 0.16)";
+    if (rgb) {
+      const { r, g, b } = rgb;
+      const L = previewBackgroundLuminance(r, g, b);
+      const mix = (from, to, t) => Math.round(from * (1 - t) + to * t);
+      if (L >= 0.52) {
+        const dr = mix(r, 0, 0.34);
+        const dg = mix(g, 0, 0.34);
+        const db = mix(b, 0, 0.34);
+        const alpha = Math.min(0.28, 0.1 + (1 - L) * 0.16);
+        dotRgba = `rgba(${dr}, ${dg}, ${db}, ${alpha.toFixed(3)})`;
+      } else {
+        const dr = mix(r, 255, 0.4);
+        const dg = mix(g, 255, 0.4);
+        const db = mix(b, 255, 0.4);
+        const alpha = Math.min(0.32, 0.14 + (1 - L) * 0.12);
+        dotRgba = `rgba(${dr}, ${dg}, ${db}, ${alpha.toFixed(3)})`;
+      }
+    }
+    root.style.setProperty("--page-dot-color", dotRgba);
+    /* Fill under dots: color layer + single radial on top (do NOT put opaque gradient above the dots) */
+    root.style.backgroundColor = surface;
+    root.style.backgroundImage = `radial-gradient(circle at 50% 50%, ${dotRgba} 1px, transparent 1.6px)`;
+    root.style.backgroundSize = "10px 10px";
+    root.style.backgroundRepeat = "repeat";
+    root.style.backgroundPosition = "0 0";
+  };
+
   const controls = {
     text: document.querySelector("#text-control"),
+    cssImport: document.querySelector("#css-import-control"),
+    applyCssImport: document.querySelector("#apply-css-import-button"),
     iconSvg: document.querySelector("#icon-svg-control"),
     iconColor: document.querySelector("#icon-color-control"),
     svgOnly: document.querySelector("#svg-only-control"),
@@ -24,6 +92,7 @@ document.addEventListener("DOMContentLoaded", () => {
     glowColor: document.querySelector("#glow-color-control"),
     textColor: document.querySelector("#text-color-control"),
     fontSize: document.querySelector("#font-size-control"),
+    lineHeight: document.querySelector("#line-height-control"),
     borderGlow: document.querySelector("#border-glow-control"),
     borderGlowColor: document.querySelector("#border-glow-color-control"),
     matchBorderGlowColor: document.querySelector("#match-border-glow-color-control"),
@@ -59,6 +128,7 @@ document.addEventListener("DOMContentLoaded", () => {
     height: document.querySelector("#height-value"),
     radius: document.querySelector("#radius-value"),
     fontSize: document.querySelector("#font-size-value"),
+    lineHeight: document.querySelector("#line-height-value"),
     sidePadding: document.querySelector("#side-padding-value"),
     iconGap: document.querySelector("#icon-gap-value"),
     borderGlowSize: document.querySelector("#border-glow-size-value"),
@@ -215,6 +285,504 @@ document.addEventListener("DOMContentLoaded", () => {
     button.replaceChildren(content);
   };
 
+  const getImportCssBlock = (cssText) => {
+    const source = String(cssText || "");
+    const customBlockMatch = source.match(/\.custom-glow-button\s*\{([\s\S]*?)\}/i);
+    if (customBlockMatch?.[1]) return customBlockMatch[1];
+    const firstBlockMatch = source.match(/\{([\s\S]*?)\}/);
+    return firstBlockMatch?.[1] || source;
+  };
+
+  const parseCssDeclarations = (rawBlock) => {
+    const declarations = new Map();
+    const block = String(rawBlock || "").replace(/\/\*[\s\S]*?\*\//g, " ");
+    const declarationPattern = /([a-z-]+)\s*:\s*([^;{}]+);/gi;
+    for (const match of block.matchAll(declarationPattern)) {
+      const key = String(match[1] || "").trim().toLowerCase();
+      const value = String(match[2] || "").trim();
+      if (key && value) {
+        declarations.set(key, value);
+      }
+    }
+    return declarations;
+  };
+
+  const extractRuleDeclarations = (cssText, selectorPatterns) => {
+    const source = String(cssText || "");
+    for (const pattern of selectorPatterns) {
+      const match = source.match(pattern);
+      if (match?.[1]) {
+        return parseCssDeclarations(match[1]);
+      }
+    }
+    return new Map();
+  };
+
+  const parseCssNumber = (rawValue) => {
+    const value = Number.parseFloat(String(rawValue || "").trim());
+    return Number.isFinite(value) ? value : null;
+  };
+
+  const parseCssColor = (rawValue) => {
+    const value = String(rawValue || "").trim();
+    if (!value) return null;
+    if (/^#[0-9a-f]{3,8}$/i.test(value)) return value;
+    if (/^(rgb|rgba|hsl|hsla)\(/i.test(value)) return value;
+    if (/^(transparent|white|black|currentcolor)$/i.test(value)) return value;
+    return null;
+  };
+
+  const extractColorToken = (rawValue) => {
+    const value = String(rawValue || "").trim();
+    if (!value) return null;
+    const colorMatch = value.match(
+      /(#[0-9a-f]{3,8}\b|rgba?\([^)]*\)|hsla?\([^)]*\)|\btransparent\b|\bwhite\b|\bblack\b)/i
+    );
+    return colorMatch ? parseCssColor(colorMatch[1]) : null;
+  };
+
+  const clampToControl = (control, value) => {
+    const numeric = Number(value);
+    if (!Number.isFinite(numeric)) return null;
+    const min = Number.parseFloat(control.min);
+    const max = Number.parseFloat(control.max);
+    const withMin = Number.isFinite(min) ? Math.max(min, numeric) : numeric;
+    const withBounds = Number.isFinite(max) ? Math.min(max, withMin) : withMin;
+    return withBounds;
+  };
+
+  const normalizeFontFamily = (rawFont) => {
+    const first = String(rawFont || "")
+      .split(",")[0]
+      .trim()
+      .replace(/^['"]|['"]$/g, "");
+    return first;
+  };
+
+  const resolveFontSelectionFromCss = (rawFamily, rawWeight) => {
+    const family = normalizeFontFamily(rawFamily).toLowerCase();
+    const weight = parseCssNumber(rawWeight) ?? 400;
+    if (!family) return null;
+    if (family.includes("whitney")) {
+      if (family.includes("light")) return "Whitney Light";
+      if (family.includes("book")) return "Whitney Book";
+      if (family.includes("semi")) return "Whitney Semibold";
+      if (family.includes("bold") || weight >= 700) return "Whitney Bold";
+      return "Whitney";
+    }
+
+    const available = Array.from(controls.textFont.options).map((option) => option.value);
+    return available.find((option) => option.toLowerCase() === family) || null;
+  };
+
+  const parseScaleFromTransform = (rawTransform) => {
+    const match = String(rawTransform || "").match(/scale\(\s*([-+]?[0-9]*\.?[0-9]+)\s*\)/i);
+    if (!match) return null;
+    const parsed = Number.parseFloat(match[1]);
+    return Number.isFinite(parsed) ? parsed : null;
+  };
+
+  const parseTranslateYPxFromTransform = (rawTransform) => {
+    const match = String(rawTransform || "").match(
+      /translateY\(\s*([-+]?[0-9]*\.?[0-9]+)\s*(px)?\s*\)/i
+    );
+    if (!match) return null;
+    const parsed = Number.parseFloat(match[1]);
+    return Number.isFinite(parsed) ? parsed : null;
+  };
+
+  const parseAnimationDurationSeconds = (rawAnimation) => {
+    const match = String(rawAnimation || "").match(/([-+]?[0-9]*\.?[0-9]+)\s*s\b/i);
+    if (!match) return null;
+    const parsed = Number.parseFloat(match[1]);
+    return Number.isFinite(parsed) ? parsed : null;
+  };
+
+  const parseBorderShorthand = (rawBorder) => {
+    const value = String(rawBorder || "").trim();
+    if (!value) return { width: null, color: null };
+    const widthMatch = value.match(/([-+]?[0-9]*\.?[0-9]+)\s*px/i);
+    const width = widthMatch ? Number.parseFloat(widthMatch[1]) : null;
+    const color = extractColorToken(value);
+    return { width, color };
+  };
+
+  const parseHorizontalPadding = (rawPadding) => {
+    const values = String(rawPadding || "")
+      .trim()
+      .split(/\s+/)
+      .map((part) => parseCssNumber(part))
+      .filter((part) => part !== null);
+
+    if (!values.length) return null;
+    if (values.length === 1) return values[0];
+    if (values.length === 2) return values[1];
+    if (values.length === 3) return values[1];
+    return values[1];
+  };
+
+  const isIntrinsicWidthKeyword = (raw) => {
+    const value = String(raw || "").trim().toLowerCase();
+    if (!value) return false;
+    return (
+      /\bfit-content\b/.test(value) ||
+      /\bmin-content\b/.test(value) ||
+      /\bmax-content\b/.test(value) ||
+      /\bhug\b/.test(value) ||
+      /\bintrinsic\b/.test(value)
+    );
+  };
+
+  const isFillContainerWidth = (raw) => {
+    const value = String(raw || "").trim().toLowerCase();
+    if (!value) return false;
+    return (
+      /\b100%\b/.test(value) ||
+      /\bstretch\b/.test(value) ||
+      /\bfill\b/.test(value) ||
+      /\b100vw\b/.test(value)
+    );
+  };
+
+  const isCssRuleSheet = (rawSource) => {
+    const source = String(rawSource || "");
+    if (/\.custom-glow-button\s*\{/i.test(source)) return true;
+    return /(^|[\s;}])[#.][\w-]+\s*\{/.test(source) || /^@[\w-]+\s*\{/m.test(source.trim());
+  };
+
+  const extractFigmaLayerLabelForButtonText = (rawSource, layoutWidthPx) => {
+    const source = String(rawSource || "");
+    const layoutW = layoutWidthPx;
+    const candidates = [];
+    const re = /\/\*\s*([^*\r\n]{1,60}?)\s*\*\/\s*[\r\n]+\s*width:\s*(\d+(?:\.\d+)?)px/gi;
+    let match;
+    while ((match = re.exec(source)) !== null) {
+      const label = match[1].trim();
+      const widthValue = Number.parseFloat(match[2]);
+      if (!label || /^(frame\s*\d+|auto layout|inside auto layout)/i.test(label)) continue;
+      if (!Number.isFinite(widthValue)) continue;
+      candidates.push({ label, widthValue });
+    }
+    if (!candidates.length) return null;
+    if (layoutW !== null && Number.isFinite(layoutW)) {
+      const inner = candidates.filter((entry) => entry.widthValue !== layoutW);
+      if (inner.length) return inner[inner.length - 1].label;
+    }
+    return candidates[candidates.length - 1].label;
+  };
+
+  const clampLayoutOffset = (value) => {
+    if (!Number.isFinite(value)) return 0;
+    return Math.max(-400, Math.min(400, value));
+  };
+
+  const importCssToState = (cssText) => {
+    const source = String(cssText || "");
+    const isRuleBasedCss = isCssRuleSheet(source);
+    const figmaTextSplit = source.split(/\/\*\s*send\s*\*\//i);
+    const figmaLayoutText = figmaTextSplit[0] || source;
+    const figmaLabelText = figmaTextSplit[1] || source;
+
+    const declarations = isRuleBasedCss
+      ? parseCssDeclarations(getImportCssBlock(source))
+      : parseCssDeclarations(figmaLayoutText);
+    const textDeclarations = isRuleBasedCss
+      ? declarations
+      : parseCssDeclarations(figmaLabelText);
+    const hoverDeclarations = extractRuleDeclarations(source, [
+      /\.custom-glow-button:hover\s*\{([\s\S]*?)\}/i,
+      /[^\w-]:hover\s*\{([\s\S]*?)\}/i,
+    ]);
+    const activeDeclarations = extractRuleDeclarations(source, [
+      /\.custom-glow-button:active\s*\{([\s\S]*?)\}/i,
+      /[^\w-]:active\s*\{([\s\S]*?)\}/i,
+    ]);
+    if (!declarations.size) return null;
+
+    const current = getStateFromControls();
+    const next = {
+      ...defaults,
+      text: current.text,
+      iconSvg: current.iconSvg,
+      svgOnly: current.svgOnly,
+      pageBg: current.pageBg,
+    };
+    const read = (key) => declarations.get(key.toLowerCase());
+    const readText = (key) => textDeclarations.get(key.toLowerCase());
+    const layoutWidthForLabel = parseCssNumber(read("width"));
+    const extractedLayerLabel = extractFigmaLayerLabelForButtonText(source, layoutWidthForLabel);
+    if (extractedLayerLabel) {
+      next.text = extractedLayerLabel;
+    }
+    const applyNumeric = (key, control, targetProp) => {
+      const raw = read(key);
+      if (!raw) return;
+      const parsed = parseCssNumber(raw);
+      if (parsed === null) return;
+      const clamped = clampToControl(control, parsed);
+      if (clamped === null) return;
+      next[targetProp] = clamped;
+    };
+
+    const bgColor = parseCssColor(read("--c"));
+    if (bgColor) next.bg = bgColor;
+    const glowColor = parseCssColor(read("--glow-color"));
+    if (glowColor) next.glowColor = glowColor;
+    const textColor = parseCssColor(read("--text-color"));
+    if (textColor) next.textColor = textColor;
+    const iconColor = parseCssColor(read("--icon-color"));
+    if (iconColor) next.iconColor = iconColor;
+    const backgroundColor = extractColorToken(read("background"));
+    if (backgroundColor) {
+      next.bg = backgroundColor;
+      if (!isRuleBasedCss) {
+        next.glowColor = backgroundColor;
+      }
+    }
+    const textColorFromRaw = extractColorToken(readText("color"));
+    if (textColorFromRaw) next.textColor = textColorFromRaw;
+    const textLineHeightFromRaw = parseCssNumber(readText("line-height"));
+    if (textLineHeightFromRaw !== null) {
+      const clampedLineHeight = clampToControl(controls.lineHeight, textLineHeightFromRaw);
+      if (clampedLineHeight !== null) next.lineHeight = clampedLineHeight;
+    }
+
+    applyNumeric("--side-padding", controls.sidePadding, "sidePadding");
+    applyNumeric("--icon-gap", controls.iconGap, "iconGap");
+    applyNumeric("--text-size", controls.fontSize, "fontSize");
+    applyNumeric("line-height", controls.lineHeight, "lineHeight");
+    applyNumeric("--border-thickness", controls.borderThickness, "borderThickness");
+    applyNumeric("--btn-height", controls.height, "height");
+    applyNumeric("--btn-width", controls.width, "width");
+    applyNumeric("--p", controls.glowSize, "glowSize");
+    applyNumeric("--hover-lift", controls.hoverLift, "hoverLift");
+    applyNumeric("--hover-scale", controls.hoverScale, "hoverScale");
+    applyNumeric("--pressed-depth", controls.pressedDepth, "pressedDepth");
+    applyNumeric("--pressed-scale", controls.pressedScale, "pressedScale");
+    applyNumeric("--pressed-opacity", controls.pressedOpacity, "pressedOpacity");
+    applyNumeric("--border-glow-size", controls.borderGlowSize, "borderGlowSize");
+    applyNumeric("width", controls.width, "width");
+    applyNumeric("height", controls.height, "height");
+    applyNumeric("border-radius", controls.radius, "radius");
+    applyNumeric("font-size", controls.fontSize, "fontSize");
+
+    const rawGap = parseCssNumber(read("gap"));
+    const rawColumnGap = parseCssNumber(read("column-gap"));
+    const rawRowGap = parseCssNumber(read("row-gap"));
+    const gapCandidate = [rawGap, rawColumnGap, rawRowGap].find((v) => v !== null);
+    if (gapCandidate !== null && gapCandidate !== undefined) {
+      const clampedGap = clampToControl(controls.iconGap, gapCandidate);
+      if (clampedGap !== null) next.iconGap = clampedGap;
+    }
+    const rawPadding = parseHorizontalPadding(read("padding"));
+    if (rawPadding !== null) {
+      const clampedPadding = clampToControl(controls.sidePadding, rawPadding);
+      if (clampedPadding !== null) next.sidePadding = clampedPadding;
+    }
+
+    const animationRaw = read("animation-duration") || read("animation");
+    if (animationRaw) {
+      const durationSeconds = parseAnimationDurationSeconds(animationRaw);
+      if (durationSeconds && durationSeconds > 0) {
+        const speedFromDuration = clampToControl(controls.speed, 2 / durationSeconds);
+        if (speedFromDuration !== null) {
+          next.speed = Number(speedFromDuration.toFixed(2));
+        }
+      }
+    }
+
+    const parseFlexGrowFromShorthand = (rawFlex) => {
+      const flex = String(rawFlex || "").trim().toLowerCase();
+      if (!flex) return null;
+      if (flex === "none") return 0;
+      if (flex === "auto") return 1;
+      const parts = flex.split(/\s+/);
+      return parseCssNumber(parts[0]);
+    };
+
+    const widthDecl = read("width");
+    const displayDecl = read("display");
+    const flexGrowDecl = read("flex-grow");
+    const flexShrinkDecl = read("flex-shrink");
+    const flexBasisDecl = read("flex-basis");
+    const flexShorthand = read("flex");
+    const isFlexLayout = /\bflex\b/.test(String(displayDecl || ""));
+
+    const resolvedFlexGrow = (() => {
+      const fromLonghand = parseCssNumber(flexGrowDecl);
+      if (fromLonghand !== null) return fromLonghand;
+      const fromShorthand = parseFlexGrowFromShorthand(flexShorthand);
+      return fromShorthand;
+    })();
+
+    if (widthDecl) {
+      if (isIntrinsicWidthKeyword(widthDecl)) {
+        next.hugText = true;
+      } else if (isFillContainerWidth(widthDecl)) {
+        next.hugText = false;
+        const widthValue = parseCssNumber(widthDecl);
+        if (widthValue !== null) {
+          const clampedWidth = clampToControl(controls.width, widthValue);
+          if (clampedWidth !== null) next.width = clampedWidth;
+        }
+      } else {
+        const widthValue = parseCssNumber(widthDecl);
+        if (widthValue !== null) {
+          const clampedWidth = clampToControl(controls.width, widthValue);
+          if (clampedWidth !== null) {
+            next.hugText = false;
+            next.width = clampedWidth;
+          }
+        } else if (/\bauto\b/i.test(String(widthDecl)) && isFlexLayout) {
+          const basis = String(flexBasisDecl || "").trim().toLowerCase();
+          const basisIsAutoOrZero = !basis || basis === "auto" || basis === "0" || basis === "0px";
+          const grow = resolvedFlexGrow;
+          if (grow !== null && grow > 0 && basisIsAutoOrZero) {
+            next.hugText = false;
+          } else if (/\bauto\b/i.test(String(widthDecl)) && basisIsAutoOrZero && grow === 0) {
+            next.hugText = true;
+          }
+        }
+      }
+    }
+
+    const leftDecl = read("left");
+    const topDecl = read("top");
+    const leftValue = leftDecl !== undefined ? parseCssNumber(leftDecl) : null;
+    const topValue = topDecl !== undefined ? parseCssNumber(topDecl) : null;
+    if (leftValue !== null) {
+      next.layoutOffsetX = clampLayoutOffset(leftValue);
+    }
+    if (topValue !== null) {
+      next.layoutOffsetY = clampLayoutOffset(topValue);
+    }
+
+    const borderRadiusRaw = read("--btn-radius") || read("border-radius");
+    if (borderRadiusRaw) {
+      if (/9999|50%/i.test(borderRadiusRaw)) {
+        next.shape = "circle";
+      } else {
+        const radiusValue = parseCssNumber(borderRadiusRaw);
+        const clampedRadius = radiusValue === null ? null : clampToControl(controls.radius, radiusValue);
+        if (clampedRadius !== null) {
+          next.shape = "rectangle";
+          next.radius = clampedRadius;
+        }
+      }
+    }
+
+    const borderGlowColorRaw = read("--border-glow-color");
+    if (borderGlowColorRaw) {
+      if (/var\(\s*--glow-color\s*\)/i.test(borderGlowColorRaw)) {
+        next.matchBorderGlowColor = true;
+      } else {
+        const borderGlowColor = parseCssColor(borderGlowColorRaw);
+        if (borderGlowColor) {
+          next.matchBorderGlowColor = false;
+          next.borderGlowColor = borderGlowColor;
+        }
+      }
+    }
+
+    const boxShadowRaw = read("box-shadow");
+    if (boxShadowRaw) {
+      next.customShadow = /\bnone\b/i.test(boxShadowRaw) ? "none" : boxShadowRaw;
+      if (!isRuleBasedCss) {
+        next.borderGlow = false;
+      } else {
+        next.borderGlow = !/\bnone\b/i.test(boxShadowRaw);
+      }
+    } else {
+      next.customShadow = "none";
+    }
+
+    const borderValue = read("border");
+    if (borderValue) {
+      const parsedBorder = parseBorderShorthand(borderValue);
+      if (parsedBorder.width !== null) {
+        const clampedThickness = clampToControl(controls.borderThickness, parsedBorder.width);
+        if (clampedThickness !== null) {
+          next.borderThickness = clampedThickness;
+        }
+      }
+      if (parsedBorder.color) {
+        next.borderColor = parsedBorder.color;
+      }
+    }
+    const borderColorRaw = extractColorToken(read("border-color"));
+    if (borderColorRaw) {
+      next.borderColor = borderColorRaw;
+    }
+
+    const textFontFamilyRaw = read("--text-font") || readText("font-family") || read("font-family");
+    const textFontWeightRaw = read("--text-weight") || readText("font-weight") || read("font-weight");
+    const textFontSelection = resolveFontSelectionFromCss(textFontFamilyRaw, textFontWeightRaw);
+    if (textFontSelection) {
+      next.textFont = textFontSelection;
+    }
+
+    const hoverTransform = hoverDeclarations.get("transform");
+    if (hoverTransform) {
+      const hoverScale = parseScaleFromTransform(hoverTransform);
+      if (hoverScale !== null) {
+        const clampedHoverScale = clampToControl(controls.hoverScale, hoverScale);
+        if (clampedHoverScale !== null) {
+          next.hoverScale = Number(clampedHoverScale.toFixed(2));
+        }
+      }
+      const hoverTranslateY = parseTranslateYPxFromTransform(hoverTransform);
+      if (hoverTranslateY !== null) {
+        const clampedHoverLift = clampToControl(controls.hoverLift, Math.abs(hoverTranslateY));
+        if (clampedHoverLift !== null) {
+          next.hoverLift = Number(clampedHoverLift);
+        }
+      }
+    }
+
+    const activeTransform = activeDeclarations.get("transform");
+    if (activeTransform) {
+      const pressedScale = parseScaleFromTransform(activeTransform);
+      if (pressedScale !== null) {
+        const clampedPressedScale = clampToControl(controls.pressedScale, pressedScale);
+        if (clampedPressedScale !== null) {
+          next.pressedScale = Number(clampedPressedScale.toFixed(2));
+        }
+      }
+      const pressedTranslateY = parseTranslateYPxFromTransform(activeTransform);
+      if (pressedTranslateY !== null) {
+        const clampedPressedDepth = clampToControl(controls.pressedDepth, Math.abs(pressedTranslateY));
+        if (clampedPressedDepth !== null) {
+          next.pressedDepth = Number(clampedPressedDepth);
+        }
+      }
+    }
+
+    const activeOpacity = parseCssNumber(activeDeclarations.get("opacity"));
+    if (activeOpacity !== null) {
+      const clampedPressedOpacity = clampToControl(controls.pressedOpacity, activeOpacity);
+      if (clampedPressedOpacity !== null) {
+        next.pressedOpacity = Number(clampedPressedOpacity.toFixed(2));
+      }
+    }
+
+    if (!isRuleBasedCss) {
+      next.shape = "rectangle";
+      next.hoverLift = 0;
+      next.hoverScale = 1;
+      next.pressedDepth = 0;
+      next.pressedScale = 1;
+      next.pressedOpacity = 1;
+      next.matchBorderGlowColor = false;
+    }
+
+    if (next.shape === "circle") {
+      next.hugText = false;
+      next.width = next.height;
+    }
+
+    return next;
+  };
+
   const defaults = {
     text: "WHY CHOOSE US",
     iconSvg: "",
@@ -228,9 +796,12 @@ document.addEventListener("DOMContentLoaded", () => {
     glowColor: "#ffffff",
     textColor: "#ffffff",
     fontSize: 16,
+    lineHeight: 19,
     borderGlow: false,
     borderGlowColor: "#ffffff",
     matchBorderGlowColor: true,
+    borderColor: "transparent",
+    customShadow: "none",
     borderGlowSize: 18,
     borderThickness: 1,
     hugText: false,
@@ -245,6 +816,8 @@ document.addEventListener("DOMContentLoaded", () => {
     pressedDepth: 3,
     pressedScale: 0.97,
     pressedOpacity: 0.9,
+    layoutOffsetX: 0,
+    layoutOffsetY: 0,
   };
 
   const getStateFromControls = () => ({
@@ -260,9 +833,14 @@ document.addEventListener("DOMContentLoaded", () => {
     glowColor: controls.glowColor.value,
     textColor: controls.textColor.value,
     fontSize: Number(controls.fontSize.value),
+    lineHeight: Number(controls.lineHeight.value),
     borderGlow: controls.borderGlow.checked,
     borderGlowColor: controls.borderGlowColor.value,
     matchBorderGlowColor: controls.matchBorderGlowColor.checked,
+    borderColor:
+      button.style.getPropertyValue("--border-color").trim() || defaults.borderColor,
+    customShadow:
+      button.style.getPropertyValue("--custom-shadow").trim() || defaults.customShadow,
     borderGlowSize: Number(controls.borderGlowSize.value),
     borderThickness: Number(controls.borderThickness.value),
     hugText: controls.hugText.checked,
@@ -277,6 +855,16 @@ document.addEventListener("DOMContentLoaded", () => {
     pressedDepth: Number(controls.pressedDepth.value),
     pressedScale: Number(controls.pressedScale.value),
     pressedOpacity: Number(controls.pressedOpacity.value),
+    layoutOffsetX: (() => {
+      const raw = button.style.getPropertyValue("--layout-offset-x").trim();
+      const parsed = Number.parseFloat(raw);
+      return Number.isFinite(parsed) ? parsed : defaults.layoutOffsetX;
+    })(),
+    layoutOffsetY: (() => {
+      const raw = button.style.getPropertyValue("--layout-offset-y").trim();
+      const parsed = Number.parseFloat(raw);
+      return Number.isFinite(parsed) ? parsed : defaults.layoutOffsetY;
+    })(),
   });
 
   const saveState = () => {
@@ -496,6 +1084,7 @@ document.addEventListener("DOMContentLoaded", () => {
     controls.glowColor.value = state.glowColor;
     controls.textColor.value = state.textColor;
     controls.fontSize.value = String(state.fontSize);
+    controls.lineHeight.value = String(state.lineHeight);
     controls.borderGlow.checked = Boolean(state.borderGlow);
     controls.matchBorderGlowColor.checked = Boolean(state.matchBorderGlowColor);
     controls.borderGlowColor.value = controls.matchBorderGlowColor.checked
@@ -527,6 +1116,7 @@ document.addEventListener("DOMContentLoaded", () => {
     button.style.setProperty("--side-padding", `${state.sidePadding}px`);
     button.style.setProperty("--icon-gap", `${state.iconGap}px`);
     button.style.setProperty("--text-size", `${state.fontSize}px`);
+    button.style.setProperty("--text-line-height", `${state.lineHeight}px`);
     button.style.setProperty("--btn-height", `${state.height}px`);
     button.style.setProperty("--btn-width", `${state.width}px`);
     button.style.setProperty("--p", `${state.glowSize}%`);
@@ -539,19 +1129,30 @@ document.addEventListener("DOMContentLoaded", () => {
       ? state.glowColor
       : state.borderGlowColor;
     button.style.setProperty("--border-glow-color", resolvedBorderGlowColor);
+    button.style.setProperty("--border-color", state.borderColor || "transparent");
+    button.style.setProperty("--custom-shadow", state.customShadow || "none");
     button.style.setProperty("--border-glow-size", `${state.borderGlowSize}px`);
     button.style.setProperty("--border-thickness", `${state.borderThickness}px`);
+    button.style.setProperty(
+      "--layout-offset-x",
+      `${Number.isFinite(Number(state.layoutOffsetX)) ? state.layoutOffsetX : 0}px`
+    );
+    button.style.setProperty(
+      "--layout-offset-y",
+      `${Number.isFinite(Number(state.layoutOffsetY)) ? state.layoutOffsetY : 0}px`
+    );
     button.classList.toggle("border-glow-enabled", Boolean(state.borderGlow));
     setMatchBorderGlowColorDisabledState(!state.borderGlow);
     setBorderGlowColorDisabledState(!state.borderGlow || controls.matchBorderGlowColor.checked);
     setBorderGlowSizeDisabledState(!state.borderGlow);
-    document.body.style.backgroundColor = state.pageBg;
+    syncPreviewDotGrid(state.pageBg);
     syncShapeLayout();
 
     valueLabels.width.textContent = String(state.width);
     valueLabels.height.textContent = String(state.height);
     valueLabels.radius.textContent = String(state.radius);
     valueLabels.fontSize.textContent = String(state.fontSize);
+    valueLabels.lineHeight.textContent = String(state.lineHeight);
     valueLabels.sidePadding.textContent = String(state.sidePadding);
     valueLabels.iconGap.textContent = String(state.iconGap);
     valueLabels.borderGlowSize.textContent = String(state.borderGlowSize);
@@ -592,6 +1193,9 @@ document.addEventListener("DOMContentLoaded", () => {
         fontSize: Number.isFinite(Number(saved.fontSize))
           ? Number(saved.fontSize)
           : defaults.fontSize,
+        lineHeight: Number.isFinite(Number(saved.lineHeight))
+          ? Number(saved.lineHeight)
+          : defaults.lineHeight,
         borderGlow: Boolean(saved.borderGlow),
         borderGlowColor:
           typeof saved.borderGlowColor === "string"
@@ -601,6 +1205,10 @@ document.addEventListener("DOMContentLoaded", () => {
           typeof saved.matchBorderGlowColor === "boolean"
             ? saved.matchBorderGlowColor
             : defaults.matchBorderGlowColor,
+        borderColor:
+          typeof saved.borderColor === "string" ? saved.borderColor : defaults.borderColor,
+        customShadow:
+          typeof saved.customShadow === "string" ? saved.customShadow : defaults.customShadow,
         borderGlowSize: Number.isFinite(Number(saved.borderGlowSize))
           ? Number(saved.borderGlowSize)
           : defaults.borderGlowSize,
@@ -629,6 +1237,12 @@ document.addEventListener("DOMContentLoaded", () => {
         pressedOpacity: Number.isFinite(Number(saved.pressedOpacity))
           ? Number(saved.pressedOpacity)
           : defaults.pressedOpacity,
+        layoutOffsetX: Number.isFinite(Number(saved.layoutOffsetX))
+          ? Number(saved.layoutOffsetX)
+          : defaults.layoutOffsetX,
+        layoutOffsetY: Number.isFinite(Number(saved.layoutOffsetY))
+          ? Number(saved.layoutOffsetY)
+          : defaults.layoutOffsetY,
       };
     } catch {
       return defaults;
@@ -687,7 +1301,7 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 
   controls.pageBg.addEventListener("input", () => {
-    document.body.style.backgroundColor = controls.pageBg.value;
+    syncPreviewDotGrid(controls.pageBg.value);
     saveState();
   });
 
@@ -709,6 +1323,13 @@ document.addEventListener("DOMContentLoaded", () => {
     const value = controls.fontSize.value;
     button.style.setProperty("--text-size", `${value}px`);
     valueLabels.fontSize.textContent = value;
+    saveState();
+  });
+
+  controls.lineHeight.addEventListener("input", () => {
+    const value = controls.lineHeight.value;
+    button.style.setProperty("--text-line-height", `${value}px`);
+    valueLabels.lineHeight.textContent = value;
     saveState();
   });
 
@@ -765,10 +1386,15 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 
   controls.width.addEventListener("input", () => {
-    if (controls.hugText.checked || controls.shape.value === "circle") return;
+    if (controls.shape.value === "circle") return;
+    if (controls.hugText.checked) {
+      controls.hugText.checked = false;
+      setWidthDisabledState(false);
+    }
     const value = controls.width.value;
     button.style.setProperty("--btn-width", `${value}px`);
     valueLabels.width.textContent = value;
+    syncShapeLayout();
     saveState();
   });
 
@@ -862,6 +1488,14 @@ document.addEventListener("DOMContentLoaded", () => {
     const borderGlowCss = controls.borderGlow.checked
       ? `\n  --border-glow-color: ${exportBorderGlowColor};\n  --border-glow-size: ${controls.borderGlowSize.value}px;\n  box-shadow: 0 0 var(--border-glow-size) color-mix(in srgb, var(--border-glow-color) 75%, transparent);`
       : "";
+    const exportBorderColor =
+      button.style.getPropertyValue("--border-color").trim() || "transparent";
+    const exportCustomShadow =
+      button.style.getPropertyValue("--custom-shadow").trim() || "none";
+    const exportLayoutOffsetX =
+      button.style.getPropertyValue("--layout-offset-x").trim() || "0px";
+    const exportLayoutOffsetY =
+      button.style.getPropertyValue("--layout-offset-y").trim() || "0px";
 
     return `.custom-glow-button {
   --c: ${controls.bg.value};
@@ -871,6 +1505,7 @@ document.addEventListener("DOMContentLoaded", () => {
   --side-padding: ${controls.sidePadding.value}px;
   --icon-gap: ${controls.iconGap.value}px;
   --text-size: ${controls.fontSize.value}px;
+  --text-line-height: ${controls.lineHeight.value}px;
   --hover-lift: ${controls.hoverLift.value}px;
   --hover-scale: ${Number(controls.hoverScale.value).toFixed(2)};
   --pressed-depth: ${controls.pressedDepth.value}px;
@@ -879,6 +1514,10 @@ document.addEventListener("DOMContentLoaded", () => {
   --p: ${controls.glowSize.value}%;
   --glow-color: ${controls.glowColor.value};
   --text-color: ${controls.textColor.value};
+  --border-color: ${exportBorderColor};
+  --custom-shadow: ${exportCustomShadow};
+  --layout-offset-x: ${exportLayoutOffsetX};
+  --layout-offset-y: ${exportLayoutOffsetY};
   --border-thickness: ${controls.borderThickness.value}px;
   --btn-width: ${controls.shape.value === "circle" ? controls.height.value : controls.width.value}px;
   --btn-height: ${controls.height.value}px;
@@ -888,9 +1527,10 @@ ${widthCss}
   padding-inline: var(--side-padding);
   color: var(--text-color);
   font-size: var(--text-size);
+  line-height: var(--text-line-height);
   font-family: var(--text-font), sans-serif;
   font-weight: var(--text-weight);
-  border: var(--border-thickness) solid transparent;
+  border: var(--border-thickness) solid var(--border-color);
   border-radius: var(--btn-radius);
   background: linear-gradient(var(--c), var(--c)) padding-box,
     conic-gradient(
@@ -898,7 +1538,8 @@ ${widthCss}
       transparent,
       var(--glow-color) var(--p),
       transparent calc(var(--p) * 2)
-    ) border-box;${borderGlowCss}
+    ) border-box;
+  box-shadow: var(--custom-shadow);${borderGlowCss}
 }
 
 /* Animation */
@@ -916,11 +1557,19 @@ ${widthCss}
 }
 
 .custom-glow-button:hover {
-  transform: translateY(calc(-1 * var(--hover-lift))) scale(var(--hover-scale));
+  transform: translate(
+      var(--layout-offset-x),
+      calc(var(--layout-offset-y) + -1 * var(--hover-lift))
+    )
+    scale(var(--hover-scale));
 }
 
 .custom-glow-button:active {
-  transform: translateY(var(--pressed-depth)) scale(var(--pressed-scale));
+  transform: translate(
+      var(--layout-offset-x),
+      calc(var(--layout-offset-y) + var(--pressed-depth))
+    )
+    scale(var(--pressed-scale));
   opacity: var(--pressed-opacity);
 }`;
   };
@@ -958,6 +1607,25 @@ ${widthCss}
     a.click();
     a.remove();
     URL.revokeObjectURL(url);
+  });
+
+  controls.applyCssImport.addEventListener("click", () => {
+    const originalLabel = controls.applyCssImport.textContent;
+    const imported = importCssToState(controls.cssImport.value);
+    if (!imported) {
+      controls.applyCssImport.textContent = "Invalid CSS";
+      setTimeout(() => {
+        controls.applyCssImport.textContent = originalLabel;
+      }, 1000);
+      return;
+    }
+
+    applyState(imported);
+    saveState();
+    controls.applyCssImport.textContent = "Applied";
+    setTimeout(() => {
+      controls.applyCssImport.textContent = originalLabel;
+    }, 1000);
   });
 
   controls.reset.addEventListener("click", () => {

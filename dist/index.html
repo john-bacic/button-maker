@@ -65,6 +65,20 @@
     </label>
 
     <label class="control">
+      <span>Import CSS (Figma or custom)</span>
+      <textarea
+        id="css-import-control"
+        rows="5"
+        placeholder=".custom-glow-button { --c: #171717; --btn-height: 80px; --btn-radius: 48px; ... }"
+      ></textarea>
+    </label>
+    <div class="css-import-actions">
+      <button id="apply-css-import-button" class="mini-action-button" type="button">
+        Apply CSS
+      </button>
+    </div>
+
+    <label class="control">
       <span>SVG Icon Markup</span>
       <textarea
         id="icon-svg-control"
@@ -131,6 +145,11 @@
     <label class="control">
       <span>Font Size: <strong id="font-size-value">16</strong>px</span>
       <input id="font-size-control" type="range" min="10" max="56" value="16" />
+    </label>
+
+    <label class="control">
+      <span>Line Height: <strong id="line-height-value">19</strong>px</span>
+      <input id="line-height-control" type="range" min="10" max="80" value="19" />
     </label>
 
     <label class="control">
