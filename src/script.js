@@ -7,6 +7,7 @@ document.addEventListener("DOMContentLoaded", () => {
   const cssOverlayContent = document.querySelector("#css-overlay-content");
   const GITHUB_OWNER = "john-bacic";
   const GITHUB_REPO = "button-maker";
+  const GITHUB_DEPLOY_REFRESH_MS = 15 * 60 * 1000;
   const STORAGE_KEY = "glow-button-controls-v1";
   const VARIATIONS_KEY = "glow-button-variations-v1";
   const CONVEX_URL = window.CONVEX_URL || "https://formal-rat-848.convex.cloud";
@@ -289,6 +290,10 @@ document.addEventListener("DOMContentLoaded", () => {
     try {
       const response = await fetch(endpoint, { cache: "no-store" });
       if (!response.ok) {
+        if (response.status === 403) {
+          controls.githubDeployCode.textContent = "GitHub Deploy Code: rate limited";
+          return;
+        }
         throw new Error(`GitHub API ${response.status}`);
       }
       const payload = await response.json();
@@ -297,7 +302,7 @@ document.addEventListener("DOMContentLoaded", () => {
         ? `GitHub Deploy Code: ${shortSha}`
         : "GitHub Deploy Code: unavailable";
     } catch {
-      controls.githubDeployCode.textContent = "GitHub Deploy Code: unavailable";
+      controls.githubDeployCode.textContent = "GitHub Deploy Code: network unavailable";
     }
   };
 
@@ -1046,7 +1051,7 @@ ${widthCss}
 
   cssOverlayContent.textContent = buildCssSnippet();
   updateGithubDeployCode();
-  setInterval(updateGithubDeployCode, 60000);
+  setInterval(updateGithubDeployCode, GITHUB_DEPLOY_REFRESH_MS);
   renderVariations(variations, "");
   syncVariationsFromCloud();
   applyState(loadState());
