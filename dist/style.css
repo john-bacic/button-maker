@@ -316,6 +316,11 @@ body {
   cursor: pointer;
 }
 
+.variation-actions button.save-feedback-error {
+  border-color: #dc2626;
+  color: #dc2626;
+}
+
 .variation-meta {
   margin: -0.15rem 0 0;
   font-size: 0.74rem;
