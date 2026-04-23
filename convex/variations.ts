@@ -9,6 +9,7 @@ export const list = query({
       id: row._id,
       name: row.name,
       stateJson: row.stateJson,
+      updatedAt: row.updatedAt,
     }));
   },
 });
@@ -31,7 +32,12 @@ export const save = mutation({
         stateJson: args.stateJson,
         updatedAt,
       });
-      return { id: existing._id, name: args.name, stateJson: args.stateJson };
+      return {
+        id: existing._id,
+        name: args.name,
+        stateJson: args.stateJson,
+        updatedAt,
+      };
     }
 
     const id = await ctx.db.insert("variations", {
@@ -40,7 +46,7 @@ export const save = mutation({
       updatedAt,
     });
 
-    return { id, name: args.name, stateJson: args.stateJson };
+    return { id, name: args.name, stateJson: args.stateJson, updatedAt };
   },
 });
 

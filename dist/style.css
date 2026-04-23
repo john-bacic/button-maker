@@ -251,6 +251,12 @@ body {
   cursor: pointer;
 }
 
+.variation-meta {
+  margin: -0.15rem 0 0;
+  font-size: 0.74rem;
+  color: #6b7280;
+}
+
 .control-divider {
   height: 1px;
   background: #e5e7eb;

@@ -35,6 +35,8 @@ document.addEventListener("DOMContentLoaded", () => {
     pressedDepth: document.querySelector("#pressed-depth-control"),
     pressedScale: document.querySelector("#pressed-scale-control"),
     pressedOpacity: document.querySelector("#pressed-opacity-control"),
+    variationName: document.querySelector("#variation-name-control"),
+    variationLastSaved: document.querySelector("#variation-last-saved"),
     variationSelect: document.querySelector("#variation-select"),
     saveVariation: document.querySelector("#save-variation-button"),
     deleteVariation: document.querySelector("#delete-variation-button"),
@@ -175,6 +177,7 @@ document.addEventListener("DOMContentLoaded", () => {
           item &&
           typeof item.id === "string" &&
           typeof item.name === "string" &&
+          (item.updatedAt === undefined || Number.isFinite(Number(item.updatedAt))) &&
           item.state &&
           typeof item.state === "object"
       );
@@ -202,8 +205,29 @@ document.addEventListener("DOMContentLoaded", () => {
     return {
       id: String(entry.id),
       name: entry.name,
+      updatedAt: Number(entry.updatedAt),
       state,
     };
+  };
+
+  const formatVariationTimestamp = (timestampMs) => {
+    if (!Number.isFinite(Number(timestampMs))) return "";
+    const timestamp = Number(timestampMs);
+    const date = new Date(timestamp);
+    if (Number.isNaN(date.getTime())) return "";
+
+    return new Intl.DateTimeFormat(undefined, {
+      year: "numeric",
+      month: "short",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+    }).format(date);
+  };
+
+  const setVariationLastSaved = (timestampMs) => {
+    const label = formatVariationTimestamp(timestampMs);
+    controls.variationLastSaved.textContent = `Last saved: ${label || "--"}`;
   };
 
   const syncVariationsFromCloud = async () => {
@@ -245,12 +269,26 @@ document.addEventListener("DOMContentLoaded", () => {
     for (const variation of variations) {
       const option = document.createElement("option");
       option.value = variation.id;
-      option.textContent = variation.name;
+      const timestampLabel = formatVariationTimestamp(variation.updatedAt);
+      option.textContent = timestampLabel
+        ? `${variation.name} - ${timestampLabel}`
+        : variation.name;
       controls.variationSelect.appendChild(option);
     }
 
     controls.variationSelect.value = selectedId;
     controls.deleteVariation.disabled = !selectedId;
+
+    if (selectedId) {
+      const selectedVariation = variations.find((entry) => entry.id === selectedId);
+      if (selectedVariation) {
+        controls.variationName.value = selectedVariation.name;
+        setVariationLastSaved(selectedVariation.updatedAt);
+      }
+      return;
+    }
+
+    setVariationLastSaved(undefined);
   };
 
   const applyState = (state) => {
@@ -674,19 +712,16 @@ ${widthCss}
 
     const selectedVariation = variations.find((entry) => entry.id === selectedId);
     if (!selectedVariation) return;
+    controls.variationName.value = selectedVariation.name;
+    setVariationLastSaved(selectedVariation.updatedAt);
     applyState(selectedVariation.state);
     saveState();
   });
 
   controls.saveVariation.addEventListener("click", async () => {
-    const suggestedName = controls.variationSelect.value
-      ? variations.find((entry) => entry.id === controls.variationSelect.value)?.name || ""
-      : "";
-    const name = window.prompt("Variation name:", suggestedName);
-    if (!name) return;
-
-    const trimmedName = name.trim();
+    const trimmedName = controls.variationName.value.trim();
     if (!trimmedName) return;
+    const now = Date.now();
     const existing = variations.find(
       (entry) => entry.name.toLowerCase() === trimmedName.toLowerCase()
     );
@@ -695,6 +730,7 @@ ${widthCss}
     if (existing) {
       existing.state = snapshot;
       existing.name = trimmedName;
+      existing.updatedAt = now;
     }
 
     try {
@@ -703,6 +739,7 @@ ${widthCss}
       if (existingById) {
         existingById.name = saved.name;
         existingById.state = saved.state;
+        existingById.updatedAt = saved.updatedAt;
       } else {
         const existingByName = variations.find(
           (entry) => entry.name.toLowerCase() === saved.name.toLowerCase()
@@ -711,6 +748,7 @@ ${widthCss}
           existingByName.id = saved.id;
           existingByName.state = saved.state;
           existingByName.name = saved.name;
+          existingByName.updatedAt = saved.updatedAt;
         } else {
           variations.push(saved);
         }
@@ -728,6 +766,7 @@ ${widthCss}
       const newVariation = {
         id: crypto.randomUUID(),
         name: trimmedName,
+        updatedAt: now,
         state: snapshot,
       };
       variations.push(newVariation);
@@ -766,6 +805,8 @@ ${widthCss}
     variations = variations.filter((entry) => entry.id !== selectedId);
     saveVariations(variations);
     renderVariations(variations, "");
+    controls.variationName.value = "";
+    setVariationLastSaved(undefined);
   });
 
   cssOverlayContent.textContent = buildCssSnippet();
