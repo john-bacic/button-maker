@@ -43,6 +43,21 @@ document.addEventListener("DOMContentLoaded", () => {
     return 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b);
   };
 
+  /** Must never be the keyword `none` when combined with other box-shadows (invalid CSS). */
+  const CUSTOM_SHADOW_NONE = "0 0 0 0 rgba(0, 0, 0, 0)";
+
+  const formatCustomShadowCssVar = (raw) => {
+    const v = String(raw ?? "").trim();
+    if (!v || v.toLowerCase() === "none") return CUSTOM_SHADOW_NONE;
+    return v;
+  };
+
+  const parseCustomShadowFromDom = (raw) => {
+    const v = String(raw ?? "").trim();
+    if (!v || v === CUSTOM_SHADOW_NONE) return "none";
+    return v;
+  };
+
   const syncPreviewDotGrid = (pageBgCss) => {
     const root = document.body;
     if (!root) return;
@@ -81,6 +96,7 @@ document.addEventListener("DOMContentLoaded", () => {
     text: document.querySelector("#text-control"),
     cssImport: document.querySelector("#css-import-control"),
     applyCssImport: document.querySelector("#apply-css-import-button"),
+    applyDefaultEffect: document.querySelector("#apply-default-effect-button"),
     iconSvg: document.querySelector("#icon-svg-control"),
     iconColor: document.querySelector("#icon-color-control"),
     svgOnly: document.querySelector("#svg-only-control"),
@@ -118,9 +134,11 @@ document.addEventListener("DOMContentLoaded", () => {
     githubDeployCode: document.querySelector("#github-deploy-code"),
     refreshGithubDeploy: document.querySelector("#refresh-github-deploy-button"),
     toggleCssOverlay: document.querySelector("#toggle-css-overlay-button"),
+    cssOverlayClose: document.querySelector("#css-overlay-close-button"),
     copyCss: document.querySelector("#copy-css-button"),
     downloadCss: document.querySelector("#download-css-button"),
     reset: document.querySelector("#reset-button"),
+    applyBorderAnimationEffect: document.querySelector("#apply-border-animation-effect-button"),
   };
 
   const valueLabels = {
@@ -535,9 +553,6 @@ document.addEventListener("DOMContentLoaded", () => {
     const backgroundColor = extractColorToken(read("background"));
     if (backgroundColor) {
       next.bg = backgroundColor;
-      if (!isRuleBasedCss) {
-        next.glowColor = backgroundColor;
-      }
     }
     const textColorFromRaw = extractColorToken(readText("color"));
     if (textColorFromRaw) next.textColor = textColorFromRaw;
@@ -767,13 +782,10 @@ document.addEventListener("DOMContentLoaded", () => {
 
     if (!isRuleBasedCss) {
       next.shape = "rectangle";
-      next.hoverLift = 0;
-      next.hoverScale = 1;
-      next.pressedDepth = 0;
-      next.pressedScale = 1;
-      next.pressedOpacity = 1;
-      next.matchBorderGlowColor = false;
+      Object.assign(next, getDefaultBorderAnimationEffect());
     }
+
+    ensureArcGlowContrastsBg(next);
 
     if (next.shape === "circle") {
       next.hugText = false;
@@ -820,6 +832,33 @@ document.addEventListener("DOMContentLoaded", () => {
     layoutOffsetY: 0,
   };
 
+  /** Conic border sweep is invisible when arc color equals fill; pick a contrasting default. */
+  const ensureArcGlowContrastsBg = (state) => {
+    if (!state || typeof state.bg !== "string" || typeof state.glowColor !== "string") return;
+    const g = state.glowColor.trim().toLowerCase();
+    const b = state.bg.trim().toLowerCase();
+    if (g !== b) return;
+    const rgb = parsePageBgToRgb(state.bg);
+    if (!rgb) {
+      state.glowColor = defaults.glowColor;
+      return;
+    }
+    const L = previewBackgroundLuminance(rgb.r, rgb.g, rgb.b);
+    state.glowColor = L < 0.5 ? defaults.glowColor : "#171717";
+  };
+
+  const getDefaultBorderAnimationEffect = () => ({
+    glowSize: defaults.glowSize,
+    speed: defaults.speed,
+    glowColor: defaults.glowColor,
+    hoverLift: defaults.hoverLift,
+    hoverScale: defaults.hoverScale,
+    pressedDepth: defaults.pressedDepth,
+    pressedScale: defaults.pressedScale,
+    pressedOpacity: defaults.pressedOpacity,
+    matchBorderGlowColor: defaults.matchBorderGlowColor,
+  });
+
   const getStateFromControls = () => ({
     text: controls.text.value,
     iconSvg: controls.iconSvg.value,
@@ -839,8 +878,9 @@ document.addEventListener("DOMContentLoaded", () => {
     matchBorderGlowColor: controls.matchBorderGlowColor.checked,
     borderColor:
       button.style.getPropertyValue("--border-color").trim() || defaults.borderColor,
-    customShadow:
-      button.style.getPropertyValue("--custom-shadow").trim() || defaults.customShadow,
+    customShadow: parseCustomShadowFromDom(
+      button.style.getPropertyValue("--custom-shadow").trim() || CUSTOM_SHADOW_NONE
+    ),
     borderGlowSize: Number(controls.borderGlowSize.value),
     borderThickness: Number(controls.borderThickness.value),
     hugText: controls.hugText.checked,
@@ -867,9 +907,35 @@ document.addEventListener("DOMContentLoaded", () => {
     })(),
   });
 
+  const approxEqual = (a, b, tol = 1e-5) => Math.abs(Number(a) - Number(b)) < tol;
+
+  const hasDefaultBorderAnimationEffect = (state) => {
+    const ref = getDefaultBorderAnimationEffect();
+    const glowHex = String(state.glowColor).trim().toLowerCase();
+    const refGlowHex = String(ref.glowColor).trim().toLowerCase();
+    return (
+      Number(state.glowSize) === ref.glowSize &&
+      approxEqual(state.speed, ref.speed, 0.0001) &&
+      glowHex === refGlowHex &&
+      Number(state.hoverLift) === ref.hoverLift &&
+      approxEqual(state.hoverScale, ref.hoverScale, 1e-6) &&
+      Number(state.pressedDepth) === ref.pressedDepth &&
+      approxEqual(state.pressedScale, ref.pressedScale, 1e-6) &&
+      approxEqual(state.pressedOpacity, ref.pressedOpacity, 1e-6) &&
+      Boolean(state.matchBorderGlowColor) === Boolean(ref.matchBorderGlowColor)
+    );
+  };
+
+  const syncApplyBorderAnimationOfferVisibility = () => {
+    controls.applyBorderAnimationEffect.hidden = hasDefaultBorderAnimationEffect(
+      getStateFromControls()
+    );
+  };
+
   const saveState = () => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(getStateFromControls()));
     cssOverlayContent.textContent = buildCssSnippet();
+    syncApplyBorderAnimationOfferVisibility();
   };
 
   const renderGithubDeployCode = (payload) => {
@@ -1071,6 +1137,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   const applyState = (incomingState) => {
     const state = { ...defaults, ...incomingState };
+    ensureArcGlowContrastsBg(state);
     const fontSettings = resolveFontSettings(state.textFont);
 
     controls.text.value = state.text;
@@ -1130,7 +1197,7 @@ document.addEventListener("DOMContentLoaded", () => {
       : state.borderGlowColor;
     button.style.setProperty("--border-glow-color", resolvedBorderGlowColor);
     button.style.setProperty("--border-color", state.borderColor || "transparent");
-    button.style.setProperty("--custom-shadow", state.customShadow || "none");
+    button.style.setProperty("--custom-shadow", formatCustomShadowCssVar(state.customShadow));
     button.style.setProperty("--border-glow-size", `${state.borderGlowSize}px`);
     button.style.setProperty("--border-thickness", `${state.borderThickness}px`);
     button.style.setProperty(
@@ -1165,6 +1232,11 @@ document.addEventListener("DOMContentLoaded", () => {
     valueLabels.pressedScale.textContent = Number(state.pressedScale).toFixed(2);
     valueLabels.pressedOpacity.textContent = Number(state.pressedOpacity).toFixed(2);
     speedMultiplier = Number(state.speed);
+    button.style.setProperty(
+      "--glow-rotate-duration",
+      `${Math.max(0.1, 2 / speedMultiplier).toFixed(2)}s`
+    );
+    syncApplyBorderAnimationOfferVisibility();
   };
 
   const loadState = () => {
@@ -1249,8 +1321,15 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   };
 
+  let keepApplyEffectOfferVisible = false;
+
+  const syncApplyEffectButtonVisibility = () => {
+    const raw = controls.cssImport.value.trim();
+    const flat = Boolean(raw && !isCssRuleSheet(controls.cssImport.value));
+    controls.applyDefaultEffect.hidden = !(flat || keepApplyEffectOfferVisible);
+  };
+
   let speedMultiplier = Number(controls.speed.value);
-  let angle = 0;
   let variations = loadVariations();
 
   controls.text.addEventListener("input", () => {
@@ -1428,6 +1507,10 @@ document.addEventListener("DOMContentLoaded", () => {
   controls.speed.addEventListener("input", () => {
     speedMultiplier = Number(controls.speed.value);
     valueLabels.speed.textContent = speedMultiplier.toFixed(1);
+    button.style.setProperty(
+      "--glow-rotate-duration",
+      `${Math.max(0.1, 2 / speedMultiplier).toFixed(2)}s`
+    );
     saveState();
   });
 
@@ -1466,12 +1549,6 @@ document.addEventListener("DOMContentLoaded", () => {
     saveState();
   });
 
-  const rotateGradient = () => {
-    angle = (angle + speedMultiplier) % 360;
-    button.style.setProperty("--gradient-angle", `${angle}deg`);
-    requestAnimationFrame(rotateGradient);
-  };
-
   const buildCssSnippet = () => {
     const fontSettings = resolveFontSettings(controls.textFont.value);
     const widthCss =
@@ -1490,8 +1567,8 @@ document.addEventListener("DOMContentLoaded", () => {
       : "";
     const exportBorderColor =
       button.style.getPropertyValue("--border-color").trim() || "transparent";
-    const exportCustomShadow =
-      button.style.getPropertyValue("--custom-shadow").trim() || "none";
+    const rawCustomShadow = button.style.getPropertyValue("--custom-shadow").trim();
+    const exportCustomShadow = parseCustomShadowFromDom(rawCustomShadow);
     const exportLayoutOffsetX =
       button.style.getPropertyValue("--layout-offset-x").trim() || "0px";
     const exportLayoutOffsetY =
@@ -1589,11 +1666,19 @@ ${widthCss}
     }, 1200);
   });
 
+  const setCssOverlayOpen = (open) => {
+    cssOverlay.classList.toggle("visible", open);
+    previewArea.classList.toggle("css-overlay-open", open);
+    cssOverlay.setAttribute("aria-hidden", String(!open));
+    controls.toggleCssOverlay.textContent = open ? "Hide CSS" : "Show CSS";
+  };
+
   controls.toggleCssOverlay.addEventListener("click", () => {
-    const isVisible = cssOverlay.classList.toggle("visible");
-    previewArea.classList.toggle("css-overlay-open", isVisible);
-    cssOverlay.setAttribute("aria-hidden", String(!isVisible));
-    controls.toggleCssOverlay.textContent = isVisible ? "Hide CSS" : "Show CSS";
+    setCssOverlayOpen(!cssOverlay.classList.contains("visible"));
+  });
+
+  controls.cssOverlayClose.addEventListener("click", () => {
+    setCssOverlayOpen(false);
   });
 
   controls.downloadCss.addEventListener("click", () => {
@@ -1622,15 +1707,57 @@ ${widthCss}
 
     applyState(imported);
     saveState();
+    const src = controls.cssImport.value.trim();
+    keepApplyEffectOfferVisible = Boolean(src && !isCssRuleSheet(controls.cssImport.value));
+    syncApplyEffectButtonVisibility();
     controls.applyCssImport.textContent = "Applied";
     setTimeout(() => {
       controls.applyCssImport.textContent = originalLabel;
     }, 1000);
   });
 
+  controls.applyDefaultEffect.addEventListener("click", () => {
+    keepApplyEffectOfferVisible = false;
+    applyState({ ...getStateFromControls(), ...getDefaultBorderAnimationEffect() });
+    saveState();
+    syncApplyEffectButtonVisibility();
+  });
+
+  let applyBorderAnimationFeedbackTimer;
+  controls.applyBorderAnimationEffect.addEventListener("click", () => {
+    const btn = controls.applyBorderAnimationEffect;
+    const originalLabel = btn.textContent;
+    applyState({ ...getStateFromControls(), ...getDefaultBorderAnimationEffect() });
+    saveState();
+    btn.hidden = false;
+    btn.textContent = "✓";
+    btn.classList.add("apply-border-animation-success");
+    btn.disabled = true;
+    if (applyBorderAnimationFeedbackTimer) {
+      clearTimeout(applyBorderAnimationFeedbackTimer);
+    }
+    applyBorderAnimationFeedbackTimer = setTimeout(() => {
+      btn.textContent = originalLabel;
+      btn.classList.remove("apply-border-animation-success");
+      btn.disabled = false;
+      applyBorderAnimationFeedbackTimer = undefined;
+      syncApplyBorderAnimationOfferVisibility();
+    }, 900);
+  });
+
+  controls.cssImport.addEventListener("input", () => {
+    const raw = controls.cssImport.value.trim();
+    if (raw && isCssRuleSheet(controls.cssImport.value)) {
+      keepApplyEffectOfferVisible = false;
+    }
+    syncApplyEffectButtonVisibility();
+  });
+
   controls.reset.addEventListener("click", () => {
     localStorage.removeItem(STORAGE_KEY);
+    keepApplyEffectOfferVisible = false;
     applyState(defaults);
+    syncApplyEffectButtonVisibility();
   });
 
   controls.refreshGithubDeploy.addEventListener("click", () => {
@@ -1778,5 +1905,5 @@ ${widthCss}
   renderVariations(variations, "");
   syncVariationsFromCloud();
   applyState(loadState());
-  rotateGradient();
+  syncApplyEffectButtonVisibility();
 });

@@ -24,7 +24,17 @@
       </button>
     </div>
     <div id="css-overlay" class="css-overlay" aria-hidden="true">
-      <pre id="css-overlay-content"></pre>
+      <div class="css-overlay-header">
+        <button
+          id="css-overlay-close-button"
+          type="button"
+          class="css-overlay-close"
+          aria-label="Close CSS panel"
+        >
+          ×
+        </button>
+      </div>
+      <pre id="css-overlay-content" class="css-overlay-pre"></pre>
     </div>
   </section>
 
@@ -51,8 +61,8 @@
         </select>
       </label>
       <div class="variation-actions">
-        <button id="save-variation-button" type="button">Save Variation</button>
-        <button id="delete-variation-button" type="button">Delete Variation</button>
+        <button id="save-variation-button" type="button">Save</button>
+        <button id="delete-variation-button" type="button">Delete</button>
       </div>
     </div>
 
@@ -75,6 +85,15 @@
     <div class="css-import-actions">
       <button id="apply-css-import-button" class="mini-action-button" type="button">
         Apply CSS
+      </button>
+      <button
+        id="apply-default-effect-button"
+        class="mini-action-button"
+        type="button"
+        title="Restore default rotating border sweep (glow arc size & speed), glow color, and hover / press motion after a flat Figma CSS paste."
+        hidden
+      >
+        Apply Effect
       </button>
     </div>
 
@@ -241,6 +260,16 @@
     <div class="control-divider" role="separator" aria-hidden="true"></div>
 
     <p class="control-section-title">Animation</p>
+    <div class="apply-border-animation-wrap">
+      <button
+        id="apply-border-animation-effect-button"
+        type="button"
+        class="mini-action-button apply-border-animation-effect-button"
+        hidden
+      >
+        Apply border animation effect
+      </button>
+    </div>
     <label class="control">
       <span>Glow Size: <strong id="glow-size-value">10</strong>%</span>
       <input id="glow-size-control" type="range" min="2" max="50" value="10" />
