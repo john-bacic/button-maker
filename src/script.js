@@ -661,6 +661,24 @@ ${widthCss}
   controls.deleteVariation.addEventListener("click", () => {
     const selectedId = controls.variationSelect.value;
     if (!selectedId) return;
+    const selectedVariation = variations.find((entry) => entry.id === selectedId);
+    if (!selectedVariation) return;
+
+    const confirmed = window.confirm(
+      `Delete variation "${selectedVariation.name}"?\n\nThis action cannot be undone.`
+    );
+    if (!confirmed) return;
+
+    const verification = window.prompt(
+      `Type "${selectedVariation.name}" to permanently delete this variation:`,
+      ""
+    );
+    if (verification === null) return;
+    if (verification.trim() !== selectedVariation.name) {
+      window.alert("Deletion canceled. Variation name did not match.");
+      return;
+    }
+
     variations = variations.filter((entry) => entry.id !== selectedId);
     saveVariations(variations);
     renderVariations(variations, "");
