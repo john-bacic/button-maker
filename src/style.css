@@ -6,6 +6,7 @@
   --p: 10%;
   --glow-color: #ffffff;
   --text-color: #ffffff;
+  --text-size: 16px;
   --text-font: "Whitney";
   --text-weight: normal;
   --border-glow-color: #ffffff;
@@ -60,7 +61,7 @@
 
 button {
   color: var(--text-color);
-  font-size: 1rem;
+  font-size: var(--text-size);
   font-family: var(--text-font), sans-serif;
   font-weight: var(--text-weight);
   letter-spacing: 0.04em;

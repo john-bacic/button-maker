@@ -19,6 +19,7 @@ document.addEventListener("DOMContentLoaded", () => {
     pageBg: document.querySelector("#page-bg-control"),
     glowColor: document.querySelector("#glow-color-control"),
     textColor: document.querySelector("#text-color-control"),
+    fontSize: document.querySelector("#font-size-control"),
     borderGlow: document.querySelector("#border-glow-control"),
     borderGlowColor: document.querySelector("#border-glow-color-control"),
     matchBorderGlowColor: document.querySelector("#match-border-glow-color-control"),
@@ -51,6 +52,7 @@ document.addEventListener("DOMContentLoaded", () => {
     width: document.querySelector("#width-value"),
     height: document.querySelector("#height-value"),
     radius: document.querySelector("#radius-value"),
+    fontSize: document.querySelector("#font-size-value"),
     borderGlowSize: document.querySelector("#border-glow-size-value"),
     borderThickness: document.querySelector("#border-thickness-value"),
     glowSize: document.querySelector("#glow-size-value"),
@@ -103,6 +105,7 @@ document.addEventListener("DOMContentLoaded", () => {
     pageBg: "#171717",
     glowColor: "#ffffff",
     textColor: "#ffffff",
+    fontSize: 16,
     borderGlow: false,
     borderGlowColor: "#ffffff",
     matchBorderGlowColor: true,
@@ -128,6 +131,7 @@ document.addEventListener("DOMContentLoaded", () => {
     pageBg: controls.pageBg.value,
     glowColor: controls.glowColor.value,
     textColor: controls.textColor.value,
+    fontSize: Number(controls.fontSize.value),
     borderGlow: controls.borderGlow.checked,
     borderGlowColor: controls.borderGlowColor.value,
     matchBorderGlowColor: controls.matchBorderGlowColor.checked,
@@ -300,6 +304,7 @@ document.addEventListener("DOMContentLoaded", () => {
     controls.pageBg.value = state.pageBg;
     controls.glowColor.value = state.glowColor;
     controls.textColor.value = state.textColor;
+    controls.fontSize.value = String(state.fontSize);
     controls.borderGlow.checked = Boolean(state.borderGlow);
     controls.matchBorderGlowColor.checked = Boolean(state.matchBorderGlowColor);
     controls.borderGlowColor.value = controls.matchBorderGlowColor.checked
@@ -325,6 +330,7 @@ document.addEventListener("DOMContentLoaded", () => {
     button.style.setProperty("--text-weight", fontSettings.weight);
     button.style.setProperty("--glow-color", state.glowColor);
     button.style.setProperty("--text-color", state.textColor);
+    button.style.setProperty("--text-size", `${state.fontSize}px`);
     button.style.setProperty("--btn-width", `${state.width}px`);
     button.style.setProperty("--btn-height", `${state.height}px`);
     button.style.setProperty("--btn-radius", `${state.radius}px`);
@@ -348,7 +354,7 @@ document.addEventListener("DOMContentLoaded", () => {
     setWidthDisabledState(Boolean(state.hugText));
     if (state.hugText) {
       button.style.width = "fit-content";
-      button.style.paddingInline = "1.8rem";
+      button.style.paddingInline = "1.2em";
     } else {
       button.style.width = "";
       button.style.paddingInline = "";
@@ -357,6 +363,7 @@ document.addEventListener("DOMContentLoaded", () => {
     valueLabels.width.textContent = String(state.width);
     valueLabels.height.textContent = String(state.height);
     valueLabels.radius.textContent = String(state.radius);
+    valueLabels.fontSize.textContent = String(state.fontSize);
     valueLabels.borderGlowSize.textContent = String(state.borderGlowSize);
     valueLabels.borderThickness.textContent = String(state.borderThickness);
     valueLabels.glowSize.textContent = String(state.glowSize);
@@ -383,6 +390,9 @@ document.addEventListener("DOMContentLoaded", () => {
         pageBg: typeof saved.pageBg === "string" ? saved.pageBg : defaults.pageBg,
         glowColor: typeof saved.glowColor === "string" ? saved.glowColor : defaults.glowColor,
         textColor: typeof saved.textColor === "string" ? saved.textColor : defaults.textColor,
+        fontSize: Number.isFinite(Number(saved.fontSize))
+          ? Number(saved.fontSize)
+          : defaults.fontSize,
         borderGlow: Boolean(saved.borderGlow),
         borderGlowColor:
           typeof saved.borderGlowColor === "string"
@@ -466,6 +476,13 @@ document.addEventListener("DOMContentLoaded", () => {
     saveState();
   });
 
+  controls.fontSize.addEventListener("input", () => {
+    const value = controls.fontSize.value;
+    button.style.setProperty("--text-size", `${value}px`);
+    valueLabels.fontSize.textContent = value;
+    saveState();
+  });
+
   controls.borderGlow.addEventListener("change", () => {
     button.classList.toggle("border-glow-enabled", controls.borderGlow.checked);
     setMatchBorderGlowColorDisabledState(!controls.borderGlow.checked);
@@ -512,7 +529,7 @@ document.addEventListener("DOMContentLoaded", () => {
     setWidthDisabledState(controls.hugText.checked);
     if (controls.hugText.checked) {
       button.style.width = "fit-content";
-      button.style.paddingInline = "1.8rem";
+      button.style.paddingInline = "1.2em";
     } else {
       button.style.width = "";
       button.style.paddingInline = "";
@@ -600,7 +617,7 @@ document.addEventListener("DOMContentLoaded", () => {
   const buildCssSnippet = () => {
     const fontSettings = resolveFontSettings(controls.textFont.value);
     const widthCss = controls.hugText.checked
-      ? "  width: fit-content;\n  padding-inline: 1.8rem;"
+      ? "  width: fit-content;\n  padding-inline: 1.2em;"
       : "  width: var(--btn-width);";
     const exportBorderGlowColor = controls.matchBorderGlowColor.checked
       ? "var(--glow-color)"
@@ -613,6 +630,7 @@ document.addEventListener("DOMContentLoaded", () => {
   --c: ${controls.bg.value};
   --text-font: "${fontSettings.family}";
   --text-weight: ${fontSettings.weight};
+  --text-size: ${controls.fontSize.value}px;
   --hover-lift: ${controls.hoverLift.value}px;
   --hover-scale: ${Number(controls.hoverScale.value).toFixed(2)};
   --pressed-depth: ${controls.pressedDepth.value}px;
@@ -628,6 +646,7 @@ document.addEventListener("DOMContentLoaded", () => {
 ${widthCss}
   height: var(--btn-height);
   color: var(--text-color);
+  font-size: var(--text-size);
   font-family: var(--text-font), sans-serif;
   font-weight: var(--text-weight);
   border: var(--border-thickness) solid transparent;
