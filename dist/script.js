@@ -3,11 +3,14 @@ document.addEventListener("DOMContentLoaded", () => {
   const previewArea = document.querySelector(".preview-area");
   const cssOverlay = document.querySelector("#css-overlay");
   const cssOverlayContent = document.querySelector("#css-overlay-content");
+  const GITHUB_OWNER = "john-bacic";
+  const GITHUB_REPO = "button-maker";
   const STORAGE_KEY = "glow-button-controls-v1";
   const VARIATIONS_KEY = "glow-button-variations-v1";
 
   const controls = {
     text: document.querySelector("#text-control"),
+    textFont: document.querySelector("#text-font-control"),
     bg: document.querySelector("#bg-control"),
     pageBg: document.querySelector("#page-bg-control"),
     glowColor: document.querySelector("#glow-color-control"),
@@ -23,9 +26,15 @@ document.addEventListener("DOMContentLoaded", () => {
     radius: document.querySelector("#radius-control"),
     glowSize: document.querySelector("#glow-size-control"),
     speed: document.querySelector("#speed-control"),
+    hoverLift: document.querySelector("#hover-lift-control"),
+    hoverScale: document.querySelector("#hover-scale-control"),
+    pressedDepth: document.querySelector("#pressed-depth-control"),
+    pressedScale: document.querySelector("#pressed-scale-control"),
+    pressedOpacity: document.querySelector("#pressed-opacity-control"),
     variationSelect: document.querySelector("#variation-select"),
     saveVariation: document.querySelector("#save-variation-button"),
     deleteVariation: document.querySelector("#delete-variation-button"),
+    githubDeployCode: document.querySelector("#github-deploy-code"),
     toggleCssOverlay: document.querySelector("#toggle-css-overlay-button"),
     copyCss: document.querySelector("#copy-css-button"),
     downloadCss: document.querySelector("#download-css-button"),
@@ -40,6 +49,11 @@ document.addEventListener("DOMContentLoaded", () => {
     borderThickness: document.querySelector("#border-thickness-value"),
     glowSize: document.querySelector("#glow-size-value"),
     speed: document.querySelector("#speed-value"),
+    hoverLift: document.querySelector("#hover-lift-value"),
+    hoverScale: document.querySelector("#hover-scale-value"),
+    pressedDepth: document.querySelector("#pressed-depth-value"),
+    pressedScale: document.querySelector("#pressed-scale-value"),
+    pressedOpacity: document.querySelector("#pressed-opacity-value"),
   };
   const controlGroups = {
     borderGlowColor: document.querySelector("#border-glow-color-group"),
@@ -68,8 +82,17 @@ document.addEventListener("DOMContentLoaded", () => {
     controlGroups.width.classList.toggle("is-disabled", isDisabled);
   };
 
+  const resolveFontSettings = (fontSelection) => {
+    if (fontSelection === "Whitney Bold") {
+      return { family: "Whitney", weight: "700" };
+    }
+
+    return { family: fontSelection, weight: "normal" };
+  };
+
   const defaults = {
     text: "WHY CHOOSE US",
+    textFont: "Whitney",
     bg: "#171717",
     pageBg: "#171717",
     glowColor: "#ffffff",
@@ -85,10 +108,16 @@ document.addEventListener("DOMContentLoaded", () => {
     radius: 48,
     glowSize: 10,
     speed: 1,
+    hoverLift: 4,
+    hoverScale: 1.03,
+    pressedDepth: 3,
+    pressedScale: 0.97,
+    pressedOpacity: 0.9,
   };
 
   const getStateFromControls = () => ({
     text: controls.text.value,
+    textFont: controls.textFont.value,
     bg: controls.bg.value,
     pageBg: controls.pageBg.value,
     glowColor: controls.glowColor.value,
@@ -104,11 +133,33 @@ document.addEventListener("DOMContentLoaded", () => {
     radius: Number(controls.radius.value),
     glowSize: Number(controls.glowSize.value),
     speed: Number(controls.speed.value),
+    hoverLift: Number(controls.hoverLift.value),
+    hoverScale: Number(controls.hoverScale.value),
+    pressedDepth: Number(controls.pressedDepth.value),
+    pressedScale: Number(controls.pressedScale.value),
+    pressedOpacity: Number(controls.pressedOpacity.value),
   });
 
   const saveState = () => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(getStateFromControls()));
     cssOverlayContent.textContent = buildCssSnippet();
+  };
+
+  const updateGithubDeployCode = async () => {
+    const endpoint = `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/commits/main`;
+    try {
+      const response = await fetch(endpoint, { cache: "no-store" });
+      if (!response.ok) {
+        throw new Error(`GitHub API ${response.status}`);
+      }
+      const payload = await response.json();
+      const shortSha = String(payload.sha || "").slice(0, 7);
+      controls.githubDeployCode.textContent = shortSha
+        ? `GitHub Deploy Code: ${shortSha}`
+        : "GitHub Deploy Code: unavailable";
+    } catch {
+      controls.githubDeployCode.textContent = "GitHub Deploy Code: unavailable";
+    }
   };
 
   const loadVariations = () => {
@@ -151,7 +202,10 @@ document.addEventListener("DOMContentLoaded", () => {
   };
 
   const applyState = (state) => {
+    const fontSettings = resolveFontSettings(state.textFont);
+
     controls.text.value = state.text;
+    controls.textFont.value = state.textFont;
     controls.bg.value = state.bg;
     controls.pageBg.value = state.pageBg;
     controls.glowColor.value = state.glowColor;
@@ -169,15 +223,27 @@ document.addEventListener("DOMContentLoaded", () => {
     controls.radius.value = String(state.radius);
     controls.glowSize.value = String(state.glowSize);
     controls.speed.value = String(state.speed);
+    controls.hoverLift.value = String(state.hoverLift);
+    controls.hoverScale.value = String(state.hoverScale);
+    controls.pressedDepth.value = String(state.pressedDepth);
+    controls.pressedScale.value = String(state.pressedScale);
+    controls.pressedOpacity.value = String(state.pressedOpacity);
 
     button.textContent = state.text || " ";
     button.style.setProperty("--c", state.bg);
+    button.style.setProperty("--text-font", `"${fontSettings.family}"`);
+    button.style.setProperty("--text-weight", fontSettings.weight);
     button.style.setProperty("--glow-color", state.glowColor);
     button.style.setProperty("--text-color", state.textColor);
     button.style.setProperty("--btn-width", `${state.width}px`);
     button.style.setProperty("--btn-height", `${state.height}px`);
     button.style.setProperty("--btn-radius", `${state.radius}px`);
     button.style.setProperty("--p", `${state.glowSize}%`);
+    button.style.setProperty("--hover-lift", `${state.hoverLift}px`);
+    button.style.setProperty("--hover-scale", String(state.hoverScale));
+    button.style.setProperty("--pressed-depth", `${state.pressedDepth}px`);
+    button.style.setProperty("--pressed-scale", String(state.pressedScale));
+    button.style.setProperty("--pressed-opacity", String(state.pressedOpacity));
     const resolvedBorderGlowColor = controls.matchBorderGlowColor.checked
       ? state.glowColor
       : state.borderGlowColor;
@@ -205,6 +271,11 @@ document.addEventListener("DOMContentLoaded", () => {
     valueLabels.borderThickness.textContent = String(state.borderThickness);
     valueLabels.glowSize.textContent = String(state.glowSize);
     valueLabels.speed.textContent = Number(state.speed).toFixed(1);
+    valueLabels.hoverLift.textContent = String(state.hoverLift);
+    valueLabels.hoverScale.textContent = Number(state.hoverScale).toFixed(2);
+    valueLabels.pressedDepth.textContent = String(state.pressedDepth);
+    valueLabels.pressedScale.textContent = Number(state.pressedScale).toFixed(2);
+    valueLabels.pressedOpacity.textContent = Number(state.pressedOpacity).toFixed(2);
     speedMultiplier = Number(state.speed);
   };
 
@@ -217,6 +288,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
       return {
         text: typeof saved.text === "string" ? saved.text : defaults.text,
+        textFont: typeof saved.textFont === "string" ? saved.textFont : defaults.textFont,
         bg: typeof saved.bg === "string" ? saved.bg : defaults.bg,
         pageBg: typeof saved.pageBg === "string" ? saved.pageBg : defaults.pageBg,
         glowColor: typeof saved.glowColor === "string" ? saved.glowColor : defaults.glowColor,
@@ -242,6 +314,21 @@ document.addEventListener("DOMContentLoaded", () => {
         radius: Number.isFinite(Number(saved.radius)) ? Number(saved.radius) : defaults.radius,
         glowSize: Number.isFinite(Number(saved.glowSize)) ? Number(saved.glowSize) : defaults.glowSize,
         speed: Number.isFinite(Number(saved.speed)) ? Number(saved.speed) : defaults.speed,
+        hoverLift: Number.isFinite(Number(saved.hoverLift))
+          ? Number(saved.hoverLift)
+          : defaults.hoverLift,
+        hoverScale: Number.isFinite(Number(saved.hoverScale))
+          ? Number(saved.hoverScale)
+          : defaults.hoverScale,
+        pressedDepth: Number.isFinite(Number(saved.pressedDepth))
+          ? Number(saved.pressedDepth)
+          : defaults.pressedDepth,
+        pressedScale: Number.isFinite(Number(saved.pressedScale))
+          ? Number(saved.pressedScale)
+          : defaults.pressedScale,
+        pressedOpacity: Number.isFinite(Number(saved.pressedOpacity))
+          ? Number(saved.pressedOpacity)
+          : defaults.pressedOpacity,
       };
     } catch {
       return defaults;
@@ -254,6 +341,13 @@ document.addEventListener("DOMContentLoaded", () => {
 
   controls.text.addEventListener("input", () => {
     button.textContent = controls.text.value || " ";
+    saveState();
+  });
+
+  controls.textFont.addEventListener("input", () => {
+    const fontSettings = resolveFontSettings(controls.textFont.value);
+    button.style.setProperty("--text-font", `"${fontSettings.family}"`);
+    button.style.setProperty("--text-weight", fontSettings.weight);
     saveState();
   });
 
@@ -372,6 +466,41 @@ document.addEventListener("DOMContentLoaded", () => {
     saveState();
   });
 
+  controls.hoverLift.addEventListener("input", () => {
+    const value = controls.hoverLift.value;
+    button.style.setProperty("--hover-lift", `${value}px`);
+    valueLabels.hoverLift.textContent = value;
+    saveState();
+  });
+
+  controls.hoverScale.addEventListener("input", () => {
+    const value = Number(controls.hoverScale.value).toFixed(2);
+    button.style.setProperty("--hover-scale", value);
+    valueLabels.hoverScale.textContent = value;
+    saveState();
+  });
+
+  controls.pressedDepth.addEventListener("input", () => {
+    const value = controls.pressedDepth.value;
+    button.style.setProperty("--pressed-depth", `${value}px`);
+    valueLabels.pressedDepth.textContent = value;
+    saveState();
+  });
+
+  controls.pressedScale.addEventListener("input", () => {
+    const value = Number(controls.pressedScale.value).toFixed(2);
+    button.style.setProperty("--pressed-scale", value);
+    valueLabels.pressedScale.textContent = value;
+    saveState();
+  });
+
+  controls.pressedOpacity.addEventListener("input", () => {
+    const value = Number(controls.pressedOpacity.value).toFixed(2);
+    button.style.setProperty("--pressed-opacity", value);
+    valueLabels.pressedOpacity.textContent = value;
+    saveState();
+  });
+
   const rotateGradient = () => {
     angle = (angle + speedMultiplier) % 360;
     button.style.setProperty("--gradient-angle", `${angle}deg`);
@@ -379,6 +508,7 @@ document.addEventListener("DOMContentLoaded", () => {
   };
 
   const buildCssSnippet = () => {
+    const fontSettings = resolveFontSettings(controls.textFont.value);
     const widthCss = controls.hugText.checked
       ? "  width: fit-content;\n  padding-inline: 1.8rem;"
       : "  width: var(--btn-width);";
@@ -391,6 +521,13 @@ document.addEventListener("DOMContentLoaded", () => {
 
     return `.custom-glow-button {
   --c: ${controls.bg.value};
+  --text-font: "${fontSettings.family}";
+  --text-weight: ${fontSettings.weight};
+  --hover-lift: ${controls.hoverLift.value}px;
+  --hover-scale: ${Number(controls.hoverScale.value).toFixed(2)};
+  --pressed-depth: ${controls.pressedDepth.value}px;
+  --pressed-scale: ${Number(controls.pressedScale.value).toFixed(2)};
+  --pressed-opacity: ${Number(controls.pressedOpacity.value).toFixed(2)};
   --p: ${controls.glowSize.value}%;
   --glow-color: ${controls.glowColor.value};
   --text-color: ${controls.textColor.value};
@@ -401,6 +538,8 @@ document.addEventListener("DOMContentLoaded", () => {
 ${widthCss}
   height: var(--btn-height);
   color: var(--text-color);
+  font-family: var(--text-font), sans-serif;
+  font-weight: var(--text-weight);
   border: var(--border-thickness) solid transparent;
   border-radius: var(--btn-radius);
   background: linear-gradient(var(--c), var(--c)) padding-box,
@@ -424,6 +563,15 @@ ${widthCss}
 
 .custom-glow-button {
   animation: glow-rotate ${Math.max(0.1, (2 / speedMultiplier).toFixed(2))}s linear infinite;
+}
+
+.custom-glow-button:hover {
+  transform: translateY(calc(-1 * var(--hover-lift))) scale(var(--hover-scale));
+}
+
+.custom-glow-button:active {
+  transform: translateY(var(--pressed-depth)) scale(var(--pressed-scale));
+  opacity: var(--pressed-opacity);
 }`;
   };
 
@@ -519,6 +667,8 @@ ${widthCss}
   });
 
   cssOverlayContent.textContent = buildCssSnippet();
+  updateGithubDeployCode();
+  setInterval(updateGithubDeployCode, 60000);
   renderVariations(variations, "");
   applyState(loadState());
   rotateGradient();
