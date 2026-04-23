@@ -204,6 +204,28 @@ body {
   font-family: "Inter", sans-serif;
 }
 
+.github-deploy-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.55rem;
+}
+
+.mini-action-button {
+  padding: 0.3rem 0.55rem;
+  border: 1px solid #d1d5db;
+  border-radius: 0.4rem;
+  background: #ffffff;
+  color: #111827;
+  font-family: "Inter", sans-serif;
+  font-size: 0.72rem;
+  cursor: pointer;
+}
+
+.mini-action-button:hover {
+  background: #f3f4f6;
+}
+
 .control-section-title {
   margin: 0;
   font-size: 0.72rem;

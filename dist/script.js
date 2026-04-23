@@ -5,9 +5,7 @@ document.addEventListener("DOMContentLoaded", () => {
   const previewArea = document.querySelector(".preview-area");
   const cssOverlay = document.querySelector("#css-overlay");
   const cssOverlayContent = document.querySelector("#css-overlay-content");
-  const GITHUB_OWNER = "john-bacic";
-  const GITHUB_REPO = "button-maker";
-  const GITHUB_DEPLOY_REFRESH_MS = 15 * 60 * 1000;
+  const GITHUB_CACHE_REFRESH_MS = 30 * 1000;
   const STORAGE_KEY = "glow-button-controls-v1";
   const VARIATIONS_KEY = "glow-button-variations-v1";
   const CONVEX_URL = window.CONVEX_URL || "https://formal-rat-848.convex.cloud";
@@ -49,6 +47,7 @@ document.addEventListener("DOMContentLoaded", () => {
     saveVariation: document.querySelector("#save-variation-button"),
     deleteVariation: document.querySelector("#delete-variation-button"),
     githubDeployCode: document.querySelector("#github-deploy-code"),
+    refreshGithubDeploy: document.querySelector("#refresh-github-deploy-button"),
     toggleCssOverlay: document.querySelector("#toggle-css-overlay-button"),
     copyCss: document.querySelector("#copy-css-button"),
     downloadCss: document.querySelector("#download-css-button"),
@@ -285,22 +284,43 @@ document.addEventListener("DOMContentLoaded", () => {
     cssOverlayContent.textContent = buildCssSnippet();
   };
 
-  const updateGithubDeployCode = async () => {
-    const endpoint = `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/commits/main`;
+  const renderGithubDeployCode = (payload) => {
+    if (!payload) {
+      controls.githubDeployCode.textContent = "GitHub Deploy Code: unavailable";
+      return;
+    }
+
+    if (payload.status === "ok" && payload.sha) {
+      controls.githubDeployCode.textContent = `GitHub Deploy Code: ${payload.sha}`;
+      return;
+    }
+
+    if (payload.status === "rate_limited") {
+      controls.githubDeployCode.textContent = "GitHub Deploy Code: rate limited";
+      return;
+    }
+
+    if (payload.status === "network_error") {
+      controls.githubDeployCode.textContent = "GitHub Deploy Code: network unavailable";
+      return;
+    }
+
+    controls.githubDeployCode.textContent = "GitHub Deploy Code: unavailable";
+  };
+
+  const loadGithubDeployCode = async () => {
     try {
-      const response = await fetch(endpoint, { cache: "no-store" });
-      if (!response.ok) {
-        if (response.status === 403) {
-          controls.githubDeployCode.textContent = "GitHub Deploy Code: rate limited";
-          return;
-        }
-        throw new Error(`GitHub API ${response.status}`);
-      }
-      const payload = await response.json();
-      const shortSha = String(payload.sha || "").slice(0, 7);
-      controls.githubDeployCode.textContent = shortSha
-        ? `GitHub Deploy Code: ${shortSha}`
-        : "GitHub Deploy Code: unavailable";
+      const cached = await convex.query("githubDeploy:getCached", {});
+      renderGithubDeployCode(cached);
+    } catch {
+      controls.githubDeployCode.textContent = "GitHub Deploy Code: unavailable";
+    }
+  };
+
+  const refreshGithubDeployCode = async () => {
+    try {
+      const payload = await convex.action("githubDeploy:refresh", {});
+      renderGithubDeployCode(payload);
     } catch {
       controls.githubDeployCode.textContent = "GitHub Deploy Code: network unavailable";
     }
@@ -945,6 +965,11 @@ ${widthCss}
     applyState(defaults);
   });
 
+  controls.refreshGithubDeploy.addEventListener("click", () => {
+    controls.githubDeployCode.textContent = "GitHub Deploy Code: refreshing...";
+    refreshGithubDeployCode();
+  });
+
   controls.variationSelect.addEventListener("change", () => {
     const selectedId = controls.variationSelect.value;
     controls.deleteVariation.disabled = !selectedId;
@@ -1050,8 +1075,8 @@ ${widthCss}
   });
 
   cssOverlayContent.textContent = buildCssSnippet();
-  updateGithubDeployCode();
-  setInterval(updateGithubDeployCode, GITHUB_DEPLOY_REFRESH_MS);
+  loadGithubDeployCode();
+  setInterval(loadGithubDeployCode, GITHUB_CACHE_REFRESH_MS);
   renderVariations(variations, "");
   syncVariationsFromCloud();
   applyState(loadState());

@@ -8,6 +8,8 @@
  * @module
  */
 
+import type * as githubDeploy from "../githubDeploy.js";
+import type * as http from "../http.js";
 import type * as svgCache from "../svgCache.js";
 import type * as variations from "../variations.js";
 
@@ -18,6 +20,8 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  githubDeploy: typeof githubDeploy;
+  http: typeof http;
   svgCache: typeof svgCache;
   variations: typeof variations;
 }>;

@@ -12,4 +12,10 @@ export default defineSchema({
     svgMarkup: v.string(),
     updatedAt: v.number(),
   }).index("by_key", ["key"]),
+  githubDeployCache: defineTable({
+    key: v.string(),
+    sha: v.optional(v.string()),
+    status: v.string(),
+    updatedAt: v.number(),
+  }).index("by_key", ["key"]),
 });
