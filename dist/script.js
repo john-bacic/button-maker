@@ -1,3 +1,5 @@
+import { ConvexHttpClient } from "https://esm.sh/convex@1.36.0/browser";
+
 document.addEventListener("DOMContentLoaded", () => {
   const button = document.querySelector("#glow-button");
   const previewArea = document.querySelector(".preview-area");
@@ -7,6 +9,8 @@ document.addEventListener("DOMContentLoaded", () => {
   const GITHUB_REPO = "button-maker";
   const STORAGE_KEY = "glow-button-controls-v1";
   const VARIATIONS_KEY = "glow-button-variations-v1";
+  const CONVEX_URL = window.CONVEX_URL || "https://formal-rat-848.convex.cloud";
+  const convex = new ConvexHttpClient(CONVEX_URL);
 
   const controls = {
     text: document.querySelector("#text-control"),
@@ -181,6 +185,54 @@ document.addEventListener("DOMContentLoaded", () => {
 
   const saveVariations = (variations) => {
     localStorage.setItem(VARIATIONS_KEY, JSON.stringify(variations));
+  };
+
+  const parseStateJson = (stateJson) => {
+    try {
+      const parsed = JSON.parse(stateJson);
+      return parsed && typeof parsed === "object" ? parsed : null;
+    } catch {
+      return null;
+    }
+  };
+
+  const normalizeRemoteVariation = (entry) => {
+    const state = parseStateJson(entry.stateJson);
+    if (!state) return null;
+    return {
+      id: String(entry.id),
+      name: entry.name,
+      state,
+    };
+  };
+
+  const syncVariationsFromCloud = async () => {
+    try {
+      const cloudRows = await convex.query("variations:list", {});
+      const normalized = cloudRows
+        .map(normalizeRemoteVariation)
+        .filter((entry) => entry !== null);
+      variations = normalized;
+      saveVariations(variations);
+      renderVariations(variations, "");
+    } catch {
+      // Fall back to local cache when cloud is unavailable.
+      renderVariations(variations, "");
+    }
+  };
+
+  const saveVariationToCloud = async (name, state) => {
+    const response = await convex.mutation("variations:save", {
+      name,
+      stateJson: JSON.stringify(state),
+    });
+    const normalized = normalizeRemoteVariation(response);
+    if (!normalized) throw new Error("Invalid cloud response");
+    return normalized;
+  };
+
+  const removeVariationFromCloud = async (id) => {
+    await convex.mutation("variations:remove", { id });
   };
 
   const renderVariations = (variations, selectedId = "") => {
@@ -626,7 +678,7 @@ ${widthCss}
     saveState();
   });
 
-  controls.saveVariation.addEventListener("click", () => {
+  controls.saveVariation.addEventListener("click", async () => {
     const suggestedName = controls.variationSelect.value
       ? variations.find((entry) => entry.id === controls.variationSelect.value)?.name || ""
       : "";
@@ -643,22 +695,48 @@ ${widthCss}
     if (existing) {
       existing.state = snapshot;
       existing.name = trimmedName;
-      saveVariations(variations);
-      renderVariations(variations, existing.id);
-      return;
     }
 
-    const newVariation = {
-      id: crypto.randomUUID(),
-      name: trimmedName,
-      state: snapshot,
-    };
-    variations.push(newVariation);
-    saveVariations(variations);
-    renderVariations(variations, newVariation.id);
+    try {
+      const saved = await saveVariationToCloud(trimmedName, snapshot);
+      const existingById = variations.find((entry) => entry.id === saved.id);
+      if (existingById) {
+        existingById.name = saved.name;
+        existingById.state = saved.state;
+      } else {
+        const existingByName = variations.find(
+          (entry) => entry.name.toLowerCase() === saved.name.toLowerCase()
+        );
+        if (existingByName) {
+          existingByName.id = saved.id;
+          existingByName.state = saved.state;
+          existingByName.name = saved.name;
+        } else {
+          variations.push(saved);
+        }
+      }
+      saveVariations(variations);
+      renderVariations(variations, saved.id);
+      return;
+    } catch {
+      if (existing) {
+        saveVariations(variations);
+        renderVariations(variations, existing.id);
+        return;
+      }
+
+      const newVariation = {
+        id: crypto.randomUUID(),
+        name: trimmedName,
+        state: snapshot,
+      };
+      variations.push(newVariation);
+      saveVariations(variations);
+      renderVariations(variations, newVariation.id);
+    }
   });
 
-  controls.deleteVariation.addEventListener("click", () => {
+  controls.deleteVariation.addEventListener("click", async () => {
     const selectedId = controls.variationSelect.value;
     if (!selectedId) return;
     const selectedVariation = variations.find((entry) => entry.id === selectedId);
@@ -679,6 +757,12 @@ ${widthCss}
       return;
     }
 
+    try {
+      await removeVariationFromCloud(selectedId);
+    } catch {
+      // If cloud removal fails, still remove from local cache.
+    }
+
     variations = variations.filter((entry) => entry.id !== selectedId);
     saveVariations(variations);
     renderVariations(variations, "");
@@ -688,6 +772,7 @@ ${widthCss}
   updateGithubDeployCode();
   setInterval(updateGithubDeployCode, 60000);
   renderVariations(variations, "");
+  syncVariationsFromCloud();
   applyState(loadState());
   rotateGradient();
 });

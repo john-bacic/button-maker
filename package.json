@@ -1,0 +1,23 @@
+{
+  "name": "css-js-shorts-by-shofol-rotating-glow-on-button",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/john-bacic/button-maker.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/john-bacic/button-maker/issues"
+  },
+  "homepage": "https://github.com/john-bacic/button-maker#readme",
+  "description": "",
+  "dependencies": {
+    "convex": "^1.36.0"
+  }
+}
