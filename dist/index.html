@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>CSS+JS Shorts by Shofol: Rotating Glow On Button</title>
+    <link rel="stylesheet" href="./style.css" />
+  </head>
+
+  <body>
+    <main class="app-shell">
+      <section class="preview-area">
+        <button id="glow-button" class="border-gradient">
+          WHY CHOOSE US
+        </button>
+        <div class="preview-toolbar">
+          <button id="toggle-css-overlay-button" class="preview-tool-button" type="button">
+            Show CSS
+          </button>
+          <button id="copy-css-button" class="preview-tool-button" type="button">
+            Copy CSS
+          </button>
+          <button id="download-css-button" class="preview-tool-button" type="button">
+            Download CSS
+          </button>
+        </div>
+        <div id="css-overlay" class="css-overlay" aria-hidden="true">
+          <pre id="css-overlay-content"></pre>
+        </div>
+      </section>
+
+      <aside class="control-panel">
+        <h1>Button Controls</h1>
+
+        <p class="control-section-title">Variations</p>
+        <div class="variation-manager">
+          <label class="control">
+            <span>Saved Variations</span>
+            <select id="variation-select">
+              <option value="">Select variation...</option>
+            </select>
+          </label>
+          <div class="variation-actions">
+            <button id="save-variation-button" type="button">Save Variation</button>
+            <button id="delete-variation-button" type="button">Delete Variation</button>
+          </div>
+        </div>
+
+        <div class="control-divider" role="separator" aria-hidden="true"></div>
+
+        <p class="control-section-title">Content &amp; Colors</p>
+        <label class="control">
+          <span>Button Text</span>
+          <input id="text-control" type="text" value="WHY CHOOSE US" />
+        </label>
+
+        <label class="control">
+          <span>Button Background Colour</span>
+          <input id="bg-control" type="color" value="#171717" />
+        </label>
+
+        <label class="control">
+          <span>Page Background</span>
+          <input id="page-bg-control" type="color" value="#171717" />
+        </label>
+
+        <label class="control">
+          <span>Glow Colour</span>
+          <input id="glow-color-control" type="color" value="#ffffff" />
+        </label>
+
+        <div class="control-divider" role="separator" aria-hidden="true"></div>
+
+        <p class="control-section-title">Border Glow</p>
+        <label class="control control-toggle">
+          <span>Border Glow</span>
+          <input id="border-glow-control" type="checkbox" />
+        </label>
+
+        <label id="border-glow-color-group" class="control">
+          <span>Border Glow Colour</span>
+          <input id="border-glow-color-control" type="color" value="#ffffff" />
+        </label>
+
+        <label id="match-border-glow-color-group" class="control control-toggle">
+          <span>Match Glow Colours</span>
+          <input id="match-border-glow-color-control" type="checkbox" checked />
+        </label>
+
+        <label id="border-glow-size-group" class="control">
+          <span>Border Glow Size: <strong id="border-glow-size-value">18</strong>px</span>
+          <input
+            id="border-glow-size-control"
+            type="range"
+            min="2"
+            max="60"
+            value="18"
+          />
+        </label>
+
+        <label class="control">
+          <span>Border Thickness: <strong id="border-thickness-value">1</strong>px</span>
+          <input
+            id="border-thickness-control"
+            type="range"
+            min="1"
+            max="12"
+            value="1"
+          />
+        </label>
+
+        <div class="control-divider" role="separator" aria-hidden="true"></div>
+
+        <p class="control-section-title">Size &amp; Shape</p>
+        <label class="control control-toggle">
+          <span>Hug Text</span>
+          <input id="hug-text-control" type="checkbox" />
+        </label>
+
+        <label id="width-control-group" class="control">
+          <span>Width: <strong id="width-value">250</strong>px</span>
+          <input id="width-control" type="range" min="100" max="420" value="250" />
+        </label>
+
+        <label class="control">
+          <span>Height: <strong id="height-value">80</strong>px</span>
+          <input id="height-control" type="range" min="50" max="140" value="80" />
+        </label>
+
+        <label class="control">
+          <span>Radius: <strong id="radius-value">48</strong>px</span>
+          <input id="radius-control" type="range" min="0" max="80" value="48" />
+        </label>
+
+        <div class="control-divider" role="separator" aria-hidden="true"></div>
+
+        <p class="control-section-title">Animation</p>
+        <label class="control">
+          <span>Glow Size: <strong id="glow-size-value">10</strong>%</span>
+          <input id="glow-size-control" type="range" min="2" max="50" value="10" />
+        </label>
+
+        <label class="control">
+          <span>Glow Speed: <strong id="speed-value">1.0</strong>x</span>
+          <input
+            id="speed-control"
+            type="range"
+            min="0.2"
+            max="3"
+            value="1"
+            step="0.1"
+          />
+        </label>
+
+        <div class="control-divider" role="separator" aria-hidden="true"></div>
+
+        <p class="control-section-title">Actions</p>
+        <div class="action-buttons">
+          <button id="reset-button" class="reset-button" type="button">
+            Reset to Defaults
+          </button>
+        </div>
+      </aside>
+    </main>
+
+    <script src="./script.js"></script>
+  </body>
+</html>
