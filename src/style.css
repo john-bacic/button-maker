@@ -181,20 +181,30 @@ body {
 
 .control-panel {
   border-left: 1px solid #e5e7eb;
-  padding: 1.25rem;
+  padding: 0.95rem 0.9rem 1rem;
   background: #ffffff;
-  color: #1f2937;
+  color: #111827;
   display: flex;
   flex-direction: column;
-  gap: 0.9rem;
+  gap: 0.65rem;
   overflow-y: auto;
   min-height: 0;
 }
 
 .control-panel h1 {
-  margin: 0 0 0.4rem;
-  font-size: 1rem;
+  margin: 0 0 0.2rem;
+  font-size: 0.92rem;
   font-weight: 600;
+  color: #1f2937;
+}
+
+.control-panel::-webkit-scrollbar {
+  width: 8px;
+}
+
+.control-panel::-webkit-scrollbar-thumb {
+  background: #d7dce2;
+  border-radius: 999px;
 }
 
 .github-deploy-code {
@@ -227,20 +237,26 @@ body {
 }
 
 .control-section-title {
-  margin: 0;
-  font-size: 0.72rem;
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: #6b7280;
+  margin: 0.3rem 0 0.15rem;
+  font-size: 0.94rem;
+  font-weight: 650;
+  letter-spacing: 0;
+  text-transform: none;
+  color: #111827;
 }
 
 .control {
   display: flex;
   flex-direction: column;
-  gap: 0.35rem;
-  font-size: 0.82rem;
-  color: #374151;
+  gap: 0.34rem;
+  font-size: 0.78rem;
+  color: #4b5563;
+}
+
+.control > span {
+  font-size: 0.78rem;
+  font-weight: 500;
+  color: #4b5563;
 }
 
 .control input,
@@ -251,11 +267,20 @@ body {
 .control input[type="text"],
 .control select,
 .control textarea {
-  padding: 0.45rem 0.55rem;
-  border: 1px solid #d1d5db;
-  border-radius: 0.45rem;
-  background: #ffffff;
+  padding: 0.48rem 0.62rem;
+  border: 1px solid #eef1f5;
+  border-radius: 0.62rem;
+  background: #f7f8fa;
   color: #111827;
+  transition: border-color 0.16s ease, background 0.16s ease;
+}
+
+.control input[type="text"]:focus,
+.control select:focus,
+.control textarea:focus {
+  outline: none;
+  border-color: #b7d8ff;
+  background: #ffffff;
 }
 
 .control textarea {
@@ -266,10 +291,38 @@ body {
 }
 
 .control input[type="color"] {
-  height: 2.2rem;
-  border-radius: 0.4rem;
-  border: 1px solid #d1d5db;
+  height: 2.15rem;
+  border-radius: 0.62rem;
+  border: 1px solid #eef1f5;
+  background: #f7f8fa;
+}
+
+.control input[type="range"] {
+  appearance: none;
+  height: 6px;
+  border-radius: 999px;
+  background: #e6ebf2;
+}
+
+.control input[type="range"]::-webkit-slider-thumb {
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
   background: #ffffff;
+  border: 1px solid #cfd6de;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.18);
+  cursor: pointer;
+}
+
+.control input[type="range"]::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #ffffff;
+  border: 1px solid #cfd6de;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.18);
+  cursor: pointer;
 }
 
 .control-toggle {
@@ -280,6 +333,7 @@ body {
 
 .control-toggle input[type="checkbox"] {
   width: auto;
+  accent-color: #0d99ff;
 }
 
 .control.is-disabled {
@@ -291,13 +345,13 @@ body {
 }
 
 .variation-manager {
-  border: 1px solid #e5e7eb;
-  border-radius: 0.55rem;
-  padding: 0.75rem;
+  border: 1px solid #edf0f3;
+  border-radius: 0.8rem;
+  padding: 0.65rem;
   display: flex;
   flex-direction: column;
-  gap: 0.6rem;
-  background: #f9fafb;
+  gap: 0.55rem;
+  background: #fbfcfd;
 }
 
 .variation-actions {
@@ -308,12 +362,16 @@ body {
 
 .variation-actions button {
   padding: 0.5rem 0.55rem;
-  border: 1px solid #d1d5db;
-  border-radius: 0.45rem;
-  background: #ffffff;
+  border: 1px solid #e8edf2;
+  border-radius: 0.62rem;
+  background: #f7f8fa;
   color: #111827;
   font-family: "Inter", sans-serif;
   cursor: pointer;
+}
+
+.variation-actions button:hover {
+  background: #eef2f7;
 }
 
 .variation-actions button.save-feedback-error {
@@ -329,8 +387,8 @@ body {
 
 .control-divider {
   height: 1px;
-  background: #e5e7eb;
-  margin: 0.1rem 0;
+  background: #edf1f4;
+  margin: 0.36rem 0;
 }
 
 .action-buttons {
@@ -341,9 +399,9 @@ body {
 
 .reset-button {
   padding: 0.65rem 0.8rem;
-  border: 1px solid #d1d5db;
-  border-radius: 0.5rem;
-  background: #ffffff;
+  border: 1px solid #e8edf2;
+  border-radius: 0.62rem;
+  background: #f7f8fa;
   color: #111827;
   font-family: "Inter", sans-serif;
   font-weight: 600;
@@ -351,7 +409,7 @@ body {
 }
 
 .reset-button:hover {
-  background: #f3f4f6;
+  background: #eef2f7;
 }
 
 @media (max-width: 900px) {
