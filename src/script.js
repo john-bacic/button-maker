@@ -123,6 +123,7 @@ document.addEventListener("DOMContentLoaded", () => {
     radius: document.querySelector("#radius-control"),
     glowSize: document.querySelector("#glow-size-control"),
     speed: document.querySelector("#speed-control"),
+    haloEnabled: document.querySelector("#halo-enabled-control"),
     haloOpacity: document.querySelector("#halo-opacity-control"),
     haloSpread: document.querySelector("#halo-spread-control"),
     haloBlur: document.querySelector("#halo-blur-control"),
@@ -180,6 +181,9 @@ document.addEventListener("DOMContentLoaded", () => {
     borderGlowSize: document.querySelector("#border-glow-size-group"),
     width: document.querySelector("#width-control-group"),
     radius: document.querySelector("#radius-control-group"),
+    haloOpacity: document.querySelector("#halo-opacity-group"),
+    haloSpread: document.querySelector("#halo-spread-group"),
+    haloBlur: document.querySelector("#halo-blur-group"),
   };
 
   const setBorderGlowColorDisabledState = (isDisabled) => {
@@ -205,6 +209,15 @@ document.addEventListener("DOMContentLoaded", () => {
   const setRadiusDisabledState = (isDisabled) => {
     controls.radius.disabled = isDisabled;
     controlGroups.radius.classList.toggle("is-disabled", isDisabled);
+  };
+
+  const setHaloSlidersDisabledState = (isDisabled) => {
+    controls.haloOpacity.disabled = isDisabled;
+    controls.haloSpread.disabled = isDisabled;
+    controls.haloBlur.disabled = isDisabled;
+    controlGroups.haloOpacity.classList.toggle("is-disabled", isDisabled);
+    controlGroups.haloSpread.classList.toggle("is-disabled", isDisabled);
+    controlGroups.haloBlur.classList.toggle("is-disabled", isDisabled);
   };
 
   const resolveFontSettings = (fontSelection) => {
@@ -798,9 +811,7 @@ document.addEventListener("DOMContentLoaded", () => {
     if (!isRuleBasedCss) {
       next.shape = "rectangle";
       Object.assign(next, getDefaultBorderAnimationEffect());
-      // Figma-flat buttons usually have bg !== page-bg, so the on-border conic
-      // trick fails — turn on the outer halo so the rotating glow stays visible.
-      next.haloOpacity = 0.9;
+      // Halo stays off here — user opts in via the "Apply Effect" button.
     }
 
     ensureArcGlowContrastsBg(next);
@@ -848,6 +859,7 @@ document.addEventListener("DOMContentLoaded", () => {
     pressedOpacity: 0.9,
     layoutOffsetX: 0,
     layoutOffsetY: 0,
+    haloEnabled: false,
     haloOpacity: 0,
     haloSpread: 6,
     haloBlur: 12,
@@ -933,6 +945,7 @@ document.addEventListener("DOMContentLoaded", () => {
       const parsed = Number.parseFloat(raw);
       return Number.isFinite(parsed) ? parsed : defaults.layoutOffsetY;
     })(),
+    haloEnabled: controls.haloEnabled.checked,
     haloOpacity: Number(controls.haloOpacity.value),
     haloSpread: Number(controls.haloSpread.value),
     haloBlur: Number(controls.haloBlur.value),
@@ -1418,6 +1431,7 @@ document.addEventListener("DOMContentLoaded", () => {
     setMatchBorderGlowColorDisabledState(!state.borderGlow);
     setBorderGlowColorDisabledState(!state.borderGlow || controls.matchBorderGlowColor.checked);
     setBorderGlowSizeDisabledState(!state.borderGlow);
+    const resolvedHaloEnabled = Boolean(state.haloEnabled);
     const resolvedHaloOpacity = clampHaloOpacity(state.haloOpacity);
     const resolvedHaloSpread = Number.isFinite(Number(state.haloSpread))
       ? Number(state.haloSpread)
@@ -1425,12 +1439,17 @@ document.addEventListener("DOMContentLoaded", () => {
     const resolvedHaloBlur = Number.isFinite(Number(state.haloBlur))
       ? Number(state.haloBlur)
       : defaults.haloBlur;
+    controls.haloEnabled.checked = resolvedHaloEnabled;
     controls.haloOpacity.value = String(resolvedHaloOpacity);
     controls.haloSpread.value = String(resolvedHaloSpread);
     controls.haloBlur.value = String(resolvedHaloBlur);
-    button.style.setProperty("--halo-opacity", String(resolvedHaloOpacity));
+    button.style.setProperty(
+      "--halo-opacity",
+      String(resolvedHaloEnabled ? resolvedHaloOpacity : 0)
+    );
     button.style.setProperty("--halo-spread", `${resolvedHaloSpread}px`);
     button.style.setProperty("--halo-blur", `${resolvedHaloBlur}px`);
+    setHaloSlidersDisabledState(!resolvedHaloEnabled);
     syncPreviewDotGrid(state.pageBg);
     syncShapeLayout();
 
@@ -1537,6 +1556,9 @@ document.addEventListener("DOMContentLoaded", () => {
         layoutOffsetY: Number.isFinite(Number(saved.layoutOffsetY))
           ? Number(saved.layoutOffsetY)
           : defaults.layoutOffsetY,
+        haloEnabled: typeof saved.haloEnabled === "boolean"
+          ? saved.haloEnabled
+          : defaults.haloEnabled,
         haloOpacity: clampHaloOpacity(saved.haloOpacity),
         haloSpread: Number.isFinite(Number(saved.haloSpread))
           ? Number(saved.haloSpread)
@@ -1751,9 +1773,25 @@ document.addEventListener("DOMContentLoaded", () => {
     saveState();
   });
 
+  controls.haloEnabled.addEventListener("change", () => {
+    const enabled = controls.haloEnabled.checked;
+    setHaloSlidersDisabledState(!enabled);
+    if (enabled && Number(controls.haloOpacity.value) === 0) {
+      controls.haloOpacity.value = "0.9";
+      valueLabels.haloOpacity.textContent = "0.90";
+    }
+    button.style.setProperty(
+      "--halo-opacity",
+      String(enabled ? clampHaloOpacity(controls.haloOpacity.value) : 0)
+    );
+    saveState();
+  });
+
   controls.haloOpacity.addEventListener("input", () => {
     const value = clampHaloOpacity(controls.haloOpacity.value);
-    button.style.setProperty("--halo-opacity", String(value));
+    if (controls.haloEnabled.checked) {
+      button.style.setProperty("--halo-opacity", String(value));
+    }
     valueLabels.haloOpacity.textContent = value.toFixed(2);
     saveState();
   });
@@ -1865,7 +1903,7 @@ document.addEventListener("DOMContentLoaded", () => {
   --btn-radius: ${radiusCss};
   --halo-spread: ${controls.haloSpread.value}px;
   --halo-blur: ${controls.haloBlur.value}px;
-  --halo-opacity: ${clampHaloOpacity(controls.haloOpacity.value)};
+  --halo-opacity: ${controls.haloEnabled.checked ? clampHaloOpacity(controls.haloOpacity.value) : 0};
   position: relative;
   isolation: isolate;
 ${widthCss}
@@ -2013,9 +2051,20 @@ ${widthCss}
     }, 1000);
   });
 
+  /** Build a state patch that activates the rotating border effect + halo glow. */
+  const buildApplyEffectPatch = (cur) => {
+    const opacity = clampHaloOpacity(cur.haloOpacity);
+    return {
+      ...getDefaultBorderAnimationEffect(),
+      haloEnabled: true,
+      haloOpacity: opacity > 0 ? opacity : 0.9,
+    };
+  };
+
   controls.applyDefaultEffect.addEventListener("click", () => {
     keepApplyEffectOfferVisible = false;
-    applyState({ ...getStateFromControls(), ...getDefaultBorderAnimationEffect() });
+    const cur = getStateFromControls();
+    applyState({ ...cur, ...buildApplyEffectPatch(cur) });
     saveState();
     syncApplyEffectButtonVisibility();
   });
@@ -2024,7 +2073,8 @@ ${widthCss}
   controls.applyBorderAnimationEffect.addEventListener("click", () => {
     const btn = controls.applyBorderAnimationEffect;
     const originalLabel = btn.textContent;
-    applyState({ ...getStateFromControls(), ...getDefaultBorderAnimationEffect() });
+    const cur = getStateFromControls();
+    applyState({ ...cur, ...buildApplyEffectPatch(cur) });
     saveState();
     btn.hidden = false;
     btn.textContent = "✓";

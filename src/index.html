@@ -343,7 +343,12 @@
     <div class="control-divider" role="separator" aria-hidden="true"></div>
 
     <p class="control-section-title">Outer Halo</p>
-    <label class="control">
+    <label class="control control-toggle">
+      <span>Outer Halo</span>
+      <input id="halo-enabled-control" type="checkbox" />
+    </label>
+
+    <label id="halo-opacity-group" class="control">
       <span>Halo Opacity: <strong id="halo-opacity-value">0.00</strong></span>
       <input
         id="halo-opacity-control"
@@ -355,7 +360,7 @@
       />
     </label>
 
-    <label class="control">
+    <label id="halo-spread-group" class="control">
       <span>Halo Spread: <strong id="halo-spread-value">6</strong>px</span>
       <input
         id="halo-spread-control"
@@ -367,7 +372,7 @@
       />
     </label>
 
-    <label class="control">
+    <label id="halo-blur-group" class="control">
       <span>Halo Blur: <strong id="halo-blur-value">12</strong>px</span>
       <input
         id="halo-blur-control"
