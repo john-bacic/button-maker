@@ -49,21 +49,74 @@
 
     <p class="control-section-title">Variations</p>
     <div class="variation-manager">
-      <label class="control">
-        <span>Variation Name</span>
-        <input id="variation-name-control" type="text" placeholder="My Variation" />
-      </label>
-      <p id="variation-last-saved" class="variation-meta">Last saved: --</p>
-      <label class="control">
-        <span>Saved Variations</span>
-        <select id="variation-select">
-          <option value="">Select variation...</option>
+      <div class="variation-top-row">
+        <select id="variation-select" class="variation-select" aria-label="Selected variation">
+          <option value="">— No variation —</option>
         </select>
-      </label>
-      <div class="variation-actions">
-        <button id="save-variation-button" type="button">Save</button>
-        <button id="delete-variation-button" type="button">Delete</button>
+        <button id="new-variation-button" class="mini-action-button" type="button">+ New</button>
       </div>
+
+      <div class="variation-name-row">
+        <input
+          id="variation-name-control"
+          type="text"
+          placeholder="Variation name"
+          aria-label="Variation name"
+          disabled
+        />
+        <button
+          id="rename-variation-button"
+          class="mini-action-button"
+          type="button"
+          hidden
+        >
+          Save name
+        </button>
+      </div>
+
+      <p id="variation-status" class="variation-meta">No variation selected</p>
+
+      <div class="variation-version-actions">
+        <input
+          id="variation-version-message"
+          type="text"
+          placeholder="Optional message for this version"
+          aria-label="Version message"
+          disabled
+        />
+        <div class="variation-action-buttons">
+          <button
+            id="save-version-button"
+            class="variation-primary-button"
+            type="button"
+            disabled
+          >
+            Save version
+          </button>
+          <button
+            id="discard-draft-button"
+            class="variation-ghost-button"
+            type="button"
+            disabled
+          >
+            Discard changes
+          </button>
+        </div>
+      </div>
+
+      <div id="variation-history-section" class="variation-history-section" hidden>
+        <p class="variation-history-title">History</p>
+        <ul id="variation-history-list" class="variation-history-list"></ul>
+      </div>
+
+      <button
+        id="delete-variation-button"
+        class="variation-delete-button"
+        type="button"
+        hidden
+      >
+        Delete variation
+      </button>
     </div>
 
     <div class="control-divider" role="separator" aria-hidden="true"></div>
@@ -289,6 +342,45 @@
 
     <div class="control-divider" role="separator" aria-hidden="true"></div>
 
+    <p class="control-section-title">Outer Halo</p>
+    <label class="control">
+      <span>Halo Opacity: <strong id="halo-opacity-value">0.00</strong></span>
+      <input
+        id="halo-opacity-control"
+        type="range"
+        min="0"
+        max="1"
+        value="0"
+        step="0.05"
+      />
+    </label>
+
+    <label class="control">
+      <span>Halo Spread: <strong id="halo-spread-value">6</strong>px</span>
+      <input
+        id="halo-spread-control"
+        type="range"
+        min="0"
+        max="30"
+        value="6"
+        step="1"
+      />
+    </label>
+
+    <label class="control">
+      <span>Halo Blur: <strong id="halo-blur-value">12</strong>px</span>
+      <input
+        id="halo-blur-control"
+        type="range"
+        min="0"
+        max="40"
+        value="12"
+        step="1"
+      />
+    </label>
+
+    <div class="control-divider" role="separator" aria-hidden="true"></div>
+
     <p class="control-section-title">Interaction States</p>
     <label class="control">
       <span>Hover Lift: <strong id="hover-lift-value">4</strong>px</span>
@@ -332,6 +424,7 @@
     </div>
   </aside>
 </main>
+    <div id="toast-container" class="toast-container" aria-live="polite"></div>
     <script type="module" src="./script.js"></script>
   </body>
 </html>

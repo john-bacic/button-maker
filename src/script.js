@@ -7,7 +7,9 @@ document.addEventListener("DOMContentLoaded", () => {
   const cssOverlayContent = document.querySelector("#css-overlay-content");
   const GITHUB_CACHE_REFRESH_MS = 30 * 1000;
   const STORAGE_KEY = "glow-button-controls-v1";
-  const VARIATIONS_KEY = "glow-button-variations-v1";
+  const VARIATIONS_KEY = "glow-button-variations-v2";
+  const SELECTED_VARIATION_KEY = "glow-button-selected-variation-v1";
+  const SELECTED_VERSION_KEY = "glow-button-selected-version-v1";
   const CONVEX_URL = window.CONVEX_URL || "https://formal-rat-848.convex.cloud";
   const convex = new ConvexHttpClient(CONVEX_URL);
 
@@ -121,16 +123,26 @@ document.addEventListener("DOMContentLoaded", () => {
     radius: document.querySelector("#radius-control"),
     glowSize: document.querySelector("#glow-size-control"),
     speed: document.querySelector("#speed-control"),
+    haloOpacity: document.querySelector("#halo-opacity-control"),
+    haloSpread: document.querySelector("#halo-spread-control"),
+    haloBlur: document.querySelector("#halo-blur-control"),
     hoverLift: document.querySelector("#hover-lift-control"),
     hoverScale: document.querySelector("#hover-scale-control"),
     pressedDepth: document.querySelector("#pressed-depth-control"),
     pressedScale: document.querySelector("#pressed-scale-control"),
     pressedOpacity: document.querySelector("#pressed-opacity-control"),
-    variationName: document.querySelector("#variation-name-control"),
-    variationLastSaved: document.querySelector("#variation-last-saved"),
     variationSelect: document.querySelector("#variation-select"),
-    saveVariation: document.querySelector("#save-variation-button"),
+    newVariation: document.querySelector("#new-variation-button"),
+    variationName: document.querySelector("#variation-name-control"),
+    renameVariation: document.querySelector("#rename-variation-button"),
+    variationStatus: document.querySelector("#variation-status"),
+    variationVersionMessage: document.querySelector("#variation-version-message"),
+    saveVersion: document.querySelector("#save-version-button"),
+    discardDraft: document.querySelector("#discard-draft-button"),
+    historySection: document.querySelector("#variation-history-section"),
+    historyList: document.querySelector("#variation-history-list"),
     deleteVariation: document.querySelector("#delete-variation-button"),
+    toastContainer: document.querySelector("#toast-container"),
     githubDeployCode: document.querySelector("#github-deploy-code"),
     refreshGithubDeploy: document.querySelector("#refresh-github-deploy-button"),
     toggleCssOverlay: document.querySelector("#toggle-css-overlay-button"),
@@ -153,6 +165,9 @@ document.addEventListener("DOMContentLoaded", () => {
     borderThickness: document.querySelector("#border-thickness-value"),
     glowSize: document.querySelector("#glow-size-value"),
     speed: document.querySelector("#speed-value"),
+    haloOpacity: document.querySelector("#halo-opacity-value"),
+    haloSpread: document.querySelector("#halo-spread-value"),
+    haloBlur: document.querySelector("#halo-blur-value"),
     hoverLift: document.querySelector("#hover-lift-value"),
     hoverScale: document.querySelector("#hover-scale-value"),
     pressedDepth: document.querySelector("#pressed-depth-value"),
@@ -783,6 +798,9 @@ document.addEventListener("DOMContentLoaded", () => {
     if (!isRuleBasedCss) {
       next.shape = "rectangle";
       Object.assign(next, getDefaultBorderAnimationEffect());
+      // Figma-flat buttons usually have bg !== page-bg, so the on-border conic
+      // trick fails — turn on the outer halo so the rotating glow stays visible.
+      next.haloOpacity = 0.9;
     }
 
     ensureArcGlowContrastsBg(next);
@@ -830,6 +848,16 @@ document.addEventListener("DOMContentLoaded", () => {
     pressedOpacity: 0.9,
     layoutOffsetX: 0,
     layoutOffsetY: 0,
+    haloOpacity: 0,
+    haloSpread: 6,
+    haloBlur: 12,
+  };
+
+  /** Halo opacity is now a deterministic state field; default off, opt-in via Figma import. */
+  const clampHaloOpacity = (raw) => {
+    const num = Number.parseFloat(raw);
+    if (!Number.isFinite(num)) return 0;
+    return Math.max(0, Math.min(1, num));
   };
 
   /** Conic border sweep is invisible when arc color equals fill; pick a contrasting default. */
@@ -905,6 +933,9 @@ document.addEventListener("DOMContentLoaded", () => {
       const parsed = Number.parseFloat(raw);
       return Number.isFinite(parsed) ? parsed : defaults.layoutOffsetY;
     })(),
+    haloOpacity: Number(controls.haloOpacity.value),
+    haloSpread: Number(controls.haloSpread.value),
+    haloBlur: Number(controls.haloBlur.value),
   });
 
   const approxEqual = (a, b, tol = 1e-5) => Math.abs(Number(a) - Number(b)) < tol;
@@ -936,6 +967,7 @@ document.addEventListener("DOMContentLoaded", () => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(getStateFromControls()));
     cssOverlayContent.textContent = buildCssSnippet();
     syncApplyBorderAnimationOfferVisibility();
+    if (typeof renderVariationHeader === "function") renderVariationHeader();
   };
 
   const renderGithubDeployCode = (payload) => {
@@ -950,7 +982,11 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     if (payload.status === "rate_limited") {
-      controls.githubDeployCode.textContent = "GitHub Deploy Code: rate limited";
+      if (payload.sha) {
+        controls.githubDeployCode.textContent = `GitHub Deploy Code: ${payload.sha} (cached — GitHub API rate limited)`;
+      } else {
+        controls.githubDeployCode.textContent = "GitHub Deploy Code: rate limited";
+      }
       return;
     }
 
@@ -980,28 +1016,6 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   };
 
-  const loadVariations = () => {
-    try {
-      const parsed = JSON.parse(localStorage.getItem(VARIATIONS_KEY) || "[]");
-      if (!Array.isArray(parsed)) return [];
-      return parsed.filter(
-        (item) =>
-          item &&
-          typeof item.id === "string" &&
-          typeof item.name === "string" &&
-          (item.updatedAt === undefined || Number.isFinite(Number(item.updatedAt))) &&
-          item.state &&
-          typeof item.state === "object"
-      );
-    } catch {
-      return [];
-    }
-  };
-
-  const saveVariations = (variations) => {
-    localStorage.setItem(VARIATIONS_KEY, JSON.stringify(variations));
-  };
-
   const parseStateJson = (stateJson) => {
     try {
       const parsed = JSON.parse(stateJson);
@@ -1009,17 +1023,6 @@ document.addEventListener("DOMContentLoaded", () => {
     } catch {
       return null;
     }
-  };
-
-  const normalizeRemoteVariation = (entry) => {
-    const state = parseStateJson(entry.stateJson);
-    if (!state) return null;
-    return {
-      id: String(entry.id),
-      name: entry.name,
-      updatedAt: Number(entry.updatedAt),
-      state,
-    };
   };
 
   const formatVariationTimestamp = (timestampMs) => {
@@ -1037,9 +1040,98 @@ document.addEventListener("DOMContentLoaded", () => {
     }).format(date);
   };
 
-  const setVariationLastSaved = (timestampMs) => {
-    const label = formatVariationTimestamp(timestampMs);
-    controls.variationLastSaved.textContent = `Last saved: ${label || "--"}`;
+  const formatRelativeTimestamp = (timestampMs) => {
+    const ts = Number(timestampMs);
+    if (!Number.isFinite(ts)) return "";
+    const diffMs = Date.now() - ts;
+    const sec = Math.round(diffMs / 1000);
+    if (sec < 5) return "just now";
+    if (sec < 60) return `${sec}s ago`;
+    const min = Math.round(sec / 60);
+    if (min < 60) return `${min}m ago`;
+    const hr = Math.round(min / 60);
+    if (hr < 24) return `${hr}h ago`;
+    const day = Math.round(hr / 24);
+    if (day < 7) return `${day}d ago`;
+    return formatVariationTimestamp(ts);
+  };
+
+  /* -------------------- Toast (non-blocking notifications) -------------- */
+  const showToast = ({ message, action, duration = 6000, isError = false } = {}) => {
+    const container = controls.toastContainer;
+    if (!container) return null;
+    const toast = document.createElement("div");
+    toast.className = "toast" + (isError ? " is-error" : "");
+    const text = document.createElement("span");
+    text.textContent = message;
+    toast.appendChild(text);
+
+    let dismissTimer;
+    const dismiss = () => {
+      if (dismissTimer) clearTimeout(dismissTimer);
+      if (toast.parentNode) toast.parentNode.removeChild(toast);
+    };
+
+    if (action && typeof action.onClick === "function") {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.textContent = action.label || "Undo";
+      btn.addEventListener("click", () => {
+        action.onClick();
+        dismiss();
+      });
+      toast.appendChild(btn);
+    }
+    container.appendChild(toast);
+    dismissTimer = setTimeout(dismiss, duration);
+    return { dismiss };
+  };
+
+  /* -------------------- Variation cache (local mirror) ------------------ */
+  /** Cloud is source of truth; local cache only used as offline fallback. */
+  const loadCachedVariations = () => {
+    try {
+      const parsed = JSON.parse(localStorage.getItem(VARIATIONS_KEY) || "[]");
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  };
+
+  const saveCachedVariations = (entries) => {
+    try {
+      localStorage.setItem(VARIATIONS_KEY, JSON.stringify(entries));
+    } catch {
+      /* localStorage may be full or disabled; ignore. */
+    }
+  };
+
+  /** Normalize a row from variations:list into the client shape used here. */
+  const normalizeVariation = (entry) => {
+    if (!entry || typeof entry.id !== "string") return null;
+    const versions = Array.isArray(entry.versions) ? entry.versions : [];
+    const normalizedVersions = versions
+      .map((v) => {
+        const state = parseStateJson(v.stateJson);
+        if (!state) return null;
+        return {
+          id: String(v.id),
+          stateJson: v.stateJson,
+          state,
+          savedAt: Number(v.savedAt),
+          message: typeof v.message === "string" ? v.message : "",
+          isLegacyBaseline: Boolean(v.isLegacyBaseline),
+        };
+      })
+      .filter((v) => v !== null);
+    if (normalizedVersions.length === 0) return null;
+    return {
+      id: String(entry.id),
+      name: typeof entry.name === "string" ? entry.name : "Untitled",
+      createdAt: Number(entry.createdAt) || Number(entry.updatedAt) || Date.now(),
+      updatedAt: Number(entry.updatedAt) || Date.now(),
+      versions: normalizedVersions,
+    };
   };
 
   const syncShapeLayout = () => {
@@ -1074,65 +1166,179 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   };
 
-  const syncVariationsFromCloud = async () => {
+  const refreshVariationsFromCloud = async () => {
     try {
       const cloudRows = await convex.query("variations:list", {});
-      const normalized = cloudRows
-        .map(normalizeRemoteVariation)
-        .filter((entry) => entry !== null);
+      const normalized = cloudRows.map(normalizeVariation).filter((row) => row !== null);
       variations = normalized;
-      saveVariations(variations);
-      renderVariations(variations, "");
+      saveCachedVariations(variations);
+      renderVariationPanel();
     } catch {
-      // Fall back to local cache when cloud is unavailable.
-      renderVariations(variations, "");
+      renderVariationPanel();
     }
   };
 
-  const saveVariationToCloud = async (name, state) => {
-    const response = await convex.mutation("variations:save", {
-      name,
-      stateJson: JSON.stringify(state),
-    });
-    const normalized = normalizeRemoteVariation(response);
-    if (!normalized) throw new Error("Invalid cloud response");
-    return normalized;
+  /* -------------------- Variation/version selection state --------------- */
+  /** Returns the variation matching selectedVariationId or null. */
+  const getSelectedVariation = () =>
+    variations.find((entry) => entry.id === selectedVariationId) || null;
+
+  /** Returns the version matching selectedVersionId or the latest. */
+  const getSelectedVersion = () => {
+    const variation = getSelectedVariation();
+    if (!variation) return null;
+    return (
+      variation.versions.find((v) => v.id === selectedVersionId) ||
+      variation.versions[0] ||
+      null
+    );
   };
 
-  const removeVariationFromCloud = async (id) => {
-    await convex.mutation("variations:remove", { id });
+  /** Stringify state with all default keys present so legacy stateJson (missing newer fields)
+   *  doesn't make every saved version look dirty. */
+  const normalizeStateForDiff = (raw) => {
+    const merged = { ...defaults, ...(raw || {}) };
+    // Use defaults' key order for determinism (insertion-order spread).
+    const ordered = {};
+    for (const key of Object.keys(defaults)) {
+      ordered[key] = merged[key];
+    }
+    return JSON.stringify(ordered);
   };
 
-  const renderVariations = (variations, selectedId = "") => {
+  /** Compares the live editor state against the checked-out version's stateJson. */
+  const isDraftDirty = () => {
+    const version = getSelectedVersion();
+    if (!version) return false;
+    try {
+      const draft = normalizeStateForDiff(getStateFromControls());
+      const saved = normalizeStateForDiff(JSON.parse(version.stateJson));
+      return draft !== saved;
+    } catch {
+      return false;
+    }
+  };
+
+  /** Rebuilds the dropdown options. Only call when `variations` array changes. */
+  const renderVariationSelector = () => {
     controls.variationSelect.innerHTML = "";
     const placeholder = document.createElement("option");
     placeholder.value = "";
-    placeholder.textContent = "Select variation...";
+    placeholder.textContent = "— No variation —";
     controls.variationSelect.appendChild(placeholder);
-
-    for (const variation of variations) {
-      const option = document.createElement("option");
-      option.value = variation.id;
-      const timestampLabel = formatVariationTimestamp(variation.updatedAt);
-      option.textContent = timestampLabel
-        ? `${variation.name} - ${timestampLabel}`
-        : variation.name;
-      controls.variationSelect.appendChild(option);
+    for (const v of variations) {
+      const opt = document.createElement("option");
+      opt.value = v.id;
+      opt.textContent = v.name;
+      controls.variationSelect.appendChild(opt);
     }
+    controls.variationSelect.value = selectedVariationId || "";
+  };
 
-    controls.variationSelect.value = selectedId;
-    controls.deleteVariation.disabled = !selectedId;
-
-    if (selectedId) {
-      const selectedVariation = variations.find((entry) => entry.id === selectedId);
-      if (selectedVariation) {
-        controls.variationName.value = selectedVariation.name;
-        setVariationLastSaved(selectedVariation.updatedAt);
-      }
+  /** Rebuilds the history list. Only call when versions actually change. */
+  const renderVariationHistory = () => {
+    const variation = getSelectedVariation();
+    const version = getSelectedVersion();
+    controls.historyList.innerHTML = "";
+    if (!variation || variation.versions.length === 0) {
+      controls.historySection.hidden = true;
       return;
     }
+    controls.historySection.hidden = false;
+    for (const v of variation.versions) {
+      const li = document.createElement("li");
+      li.className = "variation-history-item";
+      if (v.id === (version?.id || null)) li.classList.add("is-current");
+      if (v.isLegacyBaseline) li.classList.add("is-legacy");
 
-    setVariationLastSaved(undefined);
+      const meta = document.createElement("div");
+      meta.className = "variation-history-item-meta";
+      const time = document.createElement("span");
+      time.className = "variation-history-item-time";
+      time.textContent = formatRelativeTimestamp(v.savedAt);
+      time.title = formatVariationTimestamp(v.savedAt);
+      meta.appendChild(time);
+      if (v.message || v.isLegacyBaseline) {
+        const msg = document.createElement("span");
+        msg.className = "variation-history-item-message";
+        msg.textContent = v.message || "(legacy baseline)";
+        meta.appendChild(msg);
+      }
+      li.appendChild(meta);
+
+      const loadBtn = document.createElement("button");
+      loadBtn.type = "button";
+      loadBtn.textContent = v.id === version?.id ? "Loaded" : "Load";
+      loadBtn.disabled = v.id === version?.id && !isDraftDirty();
+      loadBtn.addEventListener("click", () => loadVersion(v.id));
+      li.appendChild(loadBtn);
+
+      const deleteBtn = document.createElement("button");
+      deleteBtn.type = "button";
+      deleteBtn.className = "history-delete-button";
+      deleteBtn.textContent = "Delete";
+      deleteBtn.disabled = v.isLegacyBaseline || variation.versions.length === 1;
+      deleteBtn.addEventListener("click", () => deleteVersionAction(v.id));
+      li.appendChild(deleteBtn);
+
+      controls.historyList.appendChild(li);
+    }
+  };
+
+  /** Updates name input, status text, button enabled states. Cheap, safe to call on every input. */
+  const renderVariationHeader = () => {
+    const variation = getSelectedVariation();
+    const version = getSelectedVersion();
+    const dirty = isDraftDirty();
+
+    controls.variationName.disabled = !variation;
+    if (variation && document.activeElement !== controls.variationName) {
+      controls.variationName.value = variation.name;
+    }
+    const nameChanged =
+      variation && controls.variationName.value.trim() !== variation.name;
+    controls.renameVariation.hidden = !nameChanged;
+
+    if (!variation) {
+      controls.variationStatus.textContent = "No variation selected";
+      controls.variationStatus.classList.remove("is-dirty");
+    } else if (dirty) {
+      controls.variationStatus.textContent = `● Unsaved changes (latest: ${formatRelativeTimestamp(version?.savedAt)})`;
+      controls.variationStatus.classList.add("is-dirty");
+    } else {
+      const versionCount = variation.versions.length;
+      controls.variationStatus.textContent = `Up to date · ${versionCount} version${versionCount === 1 ? "" : "s"}`;
+      controls.variationStatus.classList.remove("is-dirty");
+    }
+
+    controls.saveVersion.disabled = !variation || !dirty;
+    controls.discardDraft.disabled = !variation || !dirty;
+    controls.variationVersionMessage.disabled = !variation;
+    controls.deleteVariation.hidden = !variation;
+
+    /* Update only the "Loaded/Load" button text + disabled in current history rows
+       without rebuilding the list (preserves browser MCP refs and avoids flicker). */
+    if (variation) {
+      const items = controls.historyList.querySelectorAll(".variation-history-item");
+      items.forEach((li, index) => {
+        const v = variation.versions[index];
+        if (!v) return;
+        const isCurrent = v.id === (version?.id || null);
+        li.classList.toggle("is-current", isCurrent);
+        const loadBtn = li.querySelector("button:not(.history-delete-button)");
+        if (loadBtn) {
+          loadBtn.textContent = isCurrent ? "Loaded" : "Load";
+          loadBtn.disabled = isCurrent && !dirty;
+        }
+      });
+    }
+  };
+
+  /** Full re-render: selector + history + header. Call when `variations` array changes. */
+  const renderVariationPanel = () => {
+    renderVariationSelector();
+    renderVariationHistory();
+    renderVariationHeader();
   };
 
   const applyState = (incomingState) => {
@@ -1212,6 +1418,19 @@ document.addEventListener("DOMContentLoaded", () => {
     setMatchBorderGlowColorDisabledState(!state.borderGlow);
     setBorderGlowColorDisabledState(!state.borderGlow || controls.matchBorderGlowColor.checked);
     setBorderGlowSizeDisabledState(!state.borderGlow);
+    const resolvedHaloOpacity = clampHaloOpacity(state.haloOpacity);
+    const resolvedHaloSpread = Number.isFinite(Number(state.haloSpread))
+      ? Number(state.haloSpread)
+      : defaults.haloSpread;
+    const resolvedHaloBlur = Number.isFinite(Number(state.haloBlur))
+      ? Number(state.haloBlur)
+      : defaults.haloBlur;
+    controls.haloOpacity.value = String(resolvedHaloOpacity);
+    controls.haloSpread.value = String(resolvedHaloSpread);
+    controls.haloBlur.value = String(resolvedHaloBlur);
+    button.style.setProperty("--halo-opacity", String(resolvedHaloOpacity));
+    button.style.setProperty("--halo-spread", `${resolvedHaloSpread}px`);
+    button.style.setProperty("--halo-blur", `${resolvedHaloBlur}px`);
     syncPreviewDotGrid(state.pageBg);
     syncShapeLayout();
 
@@ -1226,6 +1445,9 @@ document.addEventListener("DOMContentLoaded", () => {
     valueLabels.borderThickness.textContent = String(state.borderThickness);
     valueLabels.glowSize.textContent = String(state.glowSize);
     valueLabels.speed.textContent = Number(state.speed).toFixed(1);
+    valueLabels.haloOpacity.textContent = resolvedHaloOpacity.toFixed(2);
+    valueLabels.haloSpread.textContent = String(resolvedHaloSpread);
+    valueLabels.haloBlur.textContent = String(resolvedHaloBlur);
     valueLabels.hoverLift.textContent = String(state.hoverLift);
     valueLabels.hoverScale.textContent = Number(state.hoverScale).toFixed(2);
     valueLabels.pressedDepth.textContent = String(state.pressedDepth);
@@ -1315,6 +1537,13 @@ document.addEventListener("DOMContentLoaded", () => {
         layoutOffsetY: Number.isFinite(Number(saved.layoutOffsetY))
           ? Number(saved.layoutOffsetY)
           : defaults.layoutOffsetY,
+        haloOpacity: clampHaloOpacity(saved.haloOpacity),
+        haloSpread: Number.isFinite(Number(saved.haloSpread))
+          ? Number(saved.haloSpread)
+          : defaults.haloSpread,
+        haloBlur: Number.isFinite(Number(saved.haloBlur))
+          ? Number(saved.haloBlur)
+          : defaults.haloBlur,
       };
     } catch {
       return defaults;
@@ -1330,7 +1559,15 @@ document.addEventListener("DOMContentLoaded", () => {
   };
 
   let speedMultiplier = Number(controls.speed.value);
-  let variations = loadVariations();
+  let variations = (loadCachedVariations()
+    .map(normalizeVariation)
+    .filter((v) => v !== null));
+  let selectedVariationId = localStorage.getItem(SELECTED_VARIATION_KEY) || null;
+  let selectedVersionId = localStorage.getItem(SELECTED_VERSION_KEY) || null;
+  if (selectedVariationId && !variations.some((v) => v.id === selectedVariationId)) {
+    selectedVariationId = null;
+    selectedVersionId = null;
+  }
 
   controls.text.addEventListener("input", () => {
     renderButtonContent(controls.text.value, controls.iconSvg.value, controls.svgOnly.checked);
@@ -1514,6 +1751,27 @@ document.addEventListener("DOMContentLoaded", () => {
     saveState();
   });
 
+  controls.haloOpacity.addEventListener("input", () => {
+    const value = clampHaloOpacity(controls.haloOpacity.value);
+    button.style.setProperty("--halo-opacity", String(value));
+    valueLabels.haloOpacity.textContent = value.toFixed(2);
+    saveState();
+  });
+
+  controls.haloSpread.addEventListener("input", () => {
+    const value = controls.haloSpread.value;
+    button.style.setProperty("--halo-spread", `${value}px`);
+    valueLabels.haloSpread.textContent = value;
+    saveState();
+  });
+
+  controls.haloBlur.addEventListener("input", () => {
+    const value = controls.haloBlur.value;
+    button.style.setProperty("--halo-blur", `${value}px`);
+    valueLabels.haloBlur.textContent = value;
+    saveState();
+  });
+
   controls.hoverLift.addEventListener("input", () => {
     const value = controls.hoverLift.value;
     button.style.setProperty("--hover-lift", `${value}px`);
@@ -1574,7 +1832,13 @@ document.addEventListener("DOMContentLoaded", () => {
     const exportLayoutOffsetY =
       button.style.getPropertyValue("--layout-offset-y").trim() || "0px";
 
-    return `.custom-glow-button {
+    return `@property --gradient-angle {
+  syntax: "<angle>";
+  inherits: true;
+  initial-value: 0deg;
+}
+
+.custom-glow-button {
   --c: ${controls.bg.value};
   --text-font: "${fontSettings.family}";
   --text-weight: ${fontSettings.weight};
@@ -1599,6 +1863,11 @@ document.addEventListener("DOMContentLoaded", () => {
   --btn-width: ${controls.shape.value === "circle" ? controls.height.value : controls.width.value}px;
   --btn-height: ${controls.height.value}px;
   --btn-radius: ${radiusCss};
+  --halo-spread: ${controls.haloSpread.value}px;
+  --halo-blur: ${controls.haloBlur.value}px;
+  --halo-opacity: ${clampHaloOpacity(controls.haloOpacity.value)};
+  position: relative;
+  isolation: isolate;
 ${widthCss}
   height: var(--btn-height);
   padding-inline: var(--side-padding);
@@ -1617,6 +1886,34 @@ ${widthCss}
       transparent calc(var(--p) * 2)
     ) border-box;
   box-shadow: var(--custom-shadow);${borderGlowCss}
+}
+
+/* Outer rotating-glow halo: keeps the sweep visible regardless of bg-vs-page contrast. */
+.custom-glow-button::before {
+  content: "";
+  position: absolute;
+  inset: calc(-1 * var(--halo-spread));
+  z-index: -1;
+  padding: var(--halo-spread);
+  box-sizing: border-box;
+  border-radius: calc(var(--btn-radius) + var(--halo-spread));
+  background: conic-gradient(
+    from var(--gradient-angle, 0deg),
+    transparent,
+    var(--glow-color) var(--p),
+    transparent calc(var(--p) * 2)
+  );
+  filter: blur(var(--halo-blur));
+  opacity: var(--halo-opacity);
+  pointer-events: none;
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  mask-composite: exclude;
 }
 
 /* Animation */
@@ -1765,145 +2062,322 @@ ${widthCss}
     refreshGithubDeployCode();
   });
 
-  controls.variationSelect.addEventListener("change", () => {
-    const selectedId = controls.variationSelect.value;
-    controls.deleteVariation.disabled = !selectedId;
-    if (!selectedId) return;
-
-    const selectedVariation = variations.find((entry) => entry.id === selectedId);
-    if (!selectedVariation) return;
-    controls.variationName.value = selectedVariation.name;
-    setVariationLastSaved(selectedVariation.updatedAt);
-    applyState(selectedVariation.state);
-    saveState();
-  });
-
-  let saveVariationFeedbackTimer;
-  const showSaveVariationFeedback = (isSuccess) => {
-    const originalLabel = controls.saveVariation.textContent;
-    controls.saveVariation.textContent = isSuccess ? "✓" : "✕";
-    controls.saveVariation.classList.toggle("save-feedback-error", !isSuccess);
-    controls.saveVariation.disabled = true;
-
-    if (saveVariationFeedbackTimer) {
-      clearTimeout(saveVariationFeedbackTimer);
+  /* -------------------- Variation/version actions ---------------------- */
+  const persistSelection = () => {
+    if (selectedVariationId) {
+      localStorage.setItem(SELECTED_VARIATION_KEY, selectedVariationId);
+    } else {
+      localStorage.removeItem(SELECTED_VARIATION_KEY);
     }
-
-    saveVariationFeedbackTimer = setTimeout(() => {
-      controls.saveVariation.textContent = originalLabel;
-      controls.saveVariation.classList.remove("save-feedback-error");
-      controls.saveVariation.disabled = false;
-    }, 900);
+    if (selectedVersionId) {
+      localStorage.setItem(SELECTED_VERSION_KEY, selectedVersionId);
+    } else {
+      localStorage.removeItem(SELECTED_VERSION_KEY);
+    }
   };
 
-  controls.saveVariation.addEventListener("click", async () => {
-    const trimmedName = controls.variationName.value.trim();
-    if (!trimmedName) return;
-    const now = Date.now();
-    const existing = variations.find(
-      (entry) => entry.name.toLowerCase() === trimmedName.toLowerCase()
-    );
-    const snapshot = getStateFromControls();
+  const setSelection = (variationId, versionId) => {
+    selectedVariationId = variationId || null;
+    selectedVersionId = versionId || null;
+    persistSelection();
+  };
 
-    if (existing) {
-      existing.state = snapshot;
-      existing.name = trimmedName;
-      existing.updatedAt = now;
+  /** Loads a specific version into the live editor, with confirm-if-dirty + undo. */
+  const loadVersion = (versionId) => {
+    const variation = getSelectedVariation();
+    if (!variation) return;
+    const target = variation.versions.find((v) => v.id === versionId);
+    if (!target) return;
+
+    const currentDraft = getStateFromControls();
+    const wasDirty = isDraftDirty();
+    const previousVersionId = selectedVersionId;
+
+    if (wasDirty) {
+      const confirmed = window.confirm(
+        "You have unsaved changes. Loading this version will discard them. Continue?"
+      );
+      if (!confirmed) return;
     }
 
-    try {
-      const saved = await saveVariationToCloud(trimmedName, snapshot);
-      const existingById = variations.find((entry) => entry.id === saved.id);
-      if (existingById) {
-        existingById.name = saved.name;
-        existingById.state = saved.state;
-        existingById.updatedAt = saved.updatedAt;
-      } else {
-        const existingByName = variations.find(
-          (entry) => entry.name.toLowerCase() === saved.name.toLowerCase()
-        );
-        if (existingByName) {
-          existingByName.id = saved.id;
-          existingByName.state = saved.state;
-          existingByName.name = saved.name;
-          existingByName.updatedAt = saved.updatedAt;
-        } else {
-          variations.push(saved);
-        }
-      }
-      saveVariations(variations);
-      renderVariations(variations, saved.id);
-      showSaveVariationFeedback(true);
+    setSelection(selectedVariationId, target.id);
+    applyState(target.state);
+    saveState();
+
+    showToast({
+      message: `Loaded ${formatRelativeTimestamp(target.savedAt)} version`,
+      action: {
+        label: "Undo",
+        onClick: () => {
+          setSelection(selectedVariationId, previousVersionId);
+          applyState(currentDraft);
+          saveState();
+        },
+      },
+    });
+  };
+
+  const onSelectVariationFromDropdown = (id) => {
+    if (!id) {
+      setSelection(null, null);
+      renderVariationPanel();
       return;
-    } catch {
-      if (existing) {
-        try {
-          saveVariations(variations);
-          renderVariations(variations, existing.id);
-          showSaveVariationFeedback(true);
-        } catch {
-          showSaveVariationFeedback(false);
-        }
+    }
+    const variation = variations.find((v) => v.id === id);
+    if (!variation) return;
+    const wasDirty = isDraftDirty();
+    if (wasDirty) {
+      const confirmed = window.confirm(
+        "You have unsaved changes on the current variation. Switch anyway and discard them?"
+      );
+      if (!confirmed) {
+        controls.variationSelect.value = selectedVariationId || "";
         return;
       }
+    }
+    const latest = variation.versions[0];
+    setSelection(variation.id, latest?.id || null);
+    if (latest) {
+      applyState(latest.state);
+      saveState();
+    } else {
+      renderVariationPanel();
+    }
+  };
 
-      const newVariation = {
-        id: crypto.randomUUID(),
-        name: trimmedName,
-        updatedAt: now,
-        state: snapshot,
-      };
-      try {
-        variations.push(newVariation);
-        saveVariations(variations);
-        renderVariations(variations, newVariation.id);
-        showSaveVariationFeedback(true);
-      } catch {
-        variations = variations.filter((entry) => entry.id !== newVariation.id);
-        showSaveVariationFeedback(false);
+  const createNewVariation = async () => {
+    const defaultName = `Variation ${variations.length + 1}`;
+    const name = (window.prompt("Name for the new variation:", defaultName) || "").trim();
+    if (!name) return;
+    const snapshot = getStateFromControls();
+    const stateJson = JSON.stringify(snapshot);
+    try {
+      const response = await convex.mutation("variations:createVariation", {
+        name,
+        stateJson,
+      });
+      const variationId = String(response.variation.id);
+      const versionId = String(response.version.id);
+      setSelection(variationId, versionId);
+      await refreshVariationsFromCloud();
+      showToast({ message: `Created "${name}"` });
+    } catch {
+      showToast({ message: "Couldn't reach cloud — variation not saved", isError: true });
+    }
+  };
+
+  const saveNewVersion = async () => {
+    const variation = getSelectedVariation();
+    if (!variation) return;
+    if (!isDraftDirty()) return;
+    const message = controls.variationVersionMessage.value.trim();
+    const stateJson = JSON.stringify(getStateFromControls());
+    try {
+      const response = await convex.mutation("variations:saveVersion", {
+        variationId: variation.id,
+        stateJson,
+        message: message || undefined,
+      });
+      const newVersionId = String(response.version.id);
+      setSelection(variation.id, newVersionId);
+      controls.variationVersionMessage.value = "";
+      await refreshVariationsFromCloud();
+      showToast({ message: "Saved new version" });
+    } catch {
+      showToast({ message: "Couldn't reach cloud — version not saved", isError: true });
+    }
+  };
+
+  const discardDraft = () => {
+    const version = getSelectedVersion();
+    if (!version) return;
+    if (!isDraftDirty()) return;
+    const previousDraft = getStateFromControls();
+    applyState(version.state);
+    saveState();
+    showToast({
+      message: "Discarded changes",
+      action: {
+        label: "Undo",
+        onClick: () => {
+          applyState(previousDraft);
+          saveState();
+        },
+      },
+    });
+  };
+
+  const deleteVersionAction = async (versionId) => {
+    const variation = getSelectedVariation();
+    if (!variation) return;
+    const target = variation.versions.find((v) => v.id === versionId);
+    if (!target || target.isLegacyBaseline) return;
+    if (variation.versions.length <= 1) return;
+    const wasSelected = selectedVersionId === versionId;
+    try {
+      await convex.mutation("variations:deleteVersion", { versionId });
+      if (wasSelected) {
+        // Pick the next-newest as new selection.
+        const remaining = variation.versions.filter((v) => v.id !== versionId);
+        const next = remaining[0];
+        setSelection(variation.id, next?.id || null);
+        if (next) {
+          applyState(next.state);
+          saveState();
+        }
       }
+      await refreshVariationsFromCloud();
+
+      // Undo: re-create the version (arrives with a fresh ID; user keeps history).
+      showToast({
+        message: "Version deleted",
+        action: {
+          label: "Undo",
+          onClick: async () => {
+            try {
+              await convex.mutation("variations:saveVersion", {
+                variationId: variation.id,
+                stateJson: target.stateJson,
+                message: target.message || undefined,
+              });
+              await refreshVariationsFromCloud();
+            } catch {
+              showToast({ message: "Couldn't restore version", isError: true });
+            }
+          },
+        },
+      });
+    } catch {
+      showToast({ message: "Couldn't reach cloud — version not deleted", isError: true });
+    }
+  };
+
+  const deleteVariationAction = async () => {
+    const variation = getSelectedVariation();
+    if (!variation) return;
+    const snapshot = {
+      name: variation.name,
+      versions: variation.versions.map((v) => ({
+        stateJson: v.stateJson,
+        message: v.message || undefined,
+        savedAt: v.savedAt,
+      })),
+    };
+    try {
+      await convex.mutation("variations:deleteVariation", {
+        variationId: variation.id,
+      });
+      setSelection(null, null);
+      await refreshVariationsFromCloud();
+      showToast({
+        message: `Deleted "${snapshot.name}"`,
+        duration: 8000,
+        action: {
+          label: "Undo",
+          onClick: async () => {
+            try {
+              // Recreate from the oldest version, then append the rest in chronological order.
+              const ordered = [...snapshot.versions].sort((a, b) => a.savedAt - b.savedAt);
+              const first = ordered.shift();
+              if (!first) return;
+              const created = await convex.mutation("variations:createVariation", {
+                name: snapshot.name,
+                stateJson: first.stateJson,
+                message: first.message,
+              });
+              const newVariationId = String(created.variation.id);
+              for (const v of ordered) {
+                await convex.mutation("variations:saveVersion", {
+                  variationId: newVariationId,
+                  stateJson: v.stateJson,
+                  message: v.message,
+                });
+              }
+              await refreshVariationsFromCloud();
+              const refreshed = variations.find((entry) => entry.id === newVariationId);
+              if (refreshed) {
+                setSelection(newVariationId, refreshed.versions[0]?.id || null);
+                renderVariationPanel();
+              }
+            } catch {
+              showToast({ message: "Couldn't restore variation", isError: true });
+            }
+          },
+        },
+      });
+    } catch {
+      showToast({ message: "Couldn't reach cloud — not deleted", isError: true });
+    }
+  };
+
+  const renameVariationAction = async () => {
+    const variation = getSelectedVariation();
+    if (!variation) return;
+    const newName = controls.variationName.value.trim();
+    if (!newName || newName === variation.name) {
+      controls.variationName.value = variation.name;
+      renderVariationPanel();
+      return;
+    }
+    try {
+      await convex.mutation("variations:renameVariation", {
+        variationId: variation.id,
+        name: newName,
+      });
+      await refreshVariationsFromCloud();
+      showToast({ message: "Renamed" });
+    } catch {
+      showToast({ message: "Couldn't reach cloud — name not changed", isError: true });
+      controls.variationName.value = variation.name;
+      renderVariationPanel();
+    }
+  };
+
+  /* -------------------- Variation event listeners ---------------------- */
+  controls.variationSelect.addEventListener("change", () => {
+    onSelectVariationFromDropdown(controls.variationSelect.value);
+  });
+
+  controls.newVariation.addEventListener("click", () => {
+    createNewVariation();
+  });
+
+  controls.variationName.addEventListener("input", () => {
+    renderVariationPanel();
+  });
+
+  controls.variationName.addEventListener("keydown", (event) => {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      renameVariationAction();
+    } else if (event.key === "Escape") {
+      const variation = getSelectedVariation();
+      if (variation) controls.variationName.value = variation.name;
+      renderVariationPanel();
     }
   });
 
-  controls.deleteVariation.addEventListener("click", async () => {
-    const selectedId = controls.variationSelect.value;
-    if (!selectedId) return;
-    const selectedVariation = variations.find((entry) => entry.id === selectedId);
-    if (!selectedVariation) return;
+  controls.renameVariation.addEventListener("click", () => {
+    renameVariationAction();
+  });
 
-    const confirmed = window.confirm(
-      `Delete variation "${selectedVariation.name}"?\n\nThis action cannot be undone.`
-    );
-    if (!confirmed) return;
+  controls.saveVersion.addEventListener("click", () => {
+    saveNewVersion();
+  });
 
-    const verification = window.prompt(
-      `Type "${selectedVariation.name}" to permanently delete this variation:`,
-      ""
-    );
-    if (verification === null) return;
-    if (verification.trim() !== selectedVariation.name) {
-      window.alert("Deletion canceled. Variation name did not match.");
-      return;
-    }
+  controls.discardDraft.addEventListener("click", () => {
+    discardDraft();
+  });
 
-    try {
-      await removeVariationFromCloud(selectedId);
-    } catch {
-      // If cloud removal fails, still remove from local cache.
-    }
-
-    variations = variations.filter((entry) => entry.id !== selectedId);
-    saveVariations(variations);
-    renderVariations(variations, "");
-    controls.variationName.value = "";
-    setVariationLastSaved(undefined);
+  controls.deleteVariation.addEventListener("click", () => {
+    deleteVariationAction();
   });
 
   cssOverlayContent.textContent = buildCssSnippet();
   loadGithubDeployCode();
   setInterval(loadGithubDeployCode, GITHUB_CACHE_REFRESH_MS);
-  renderVariations(variations, "");
-  syncVariationsFromCloud();
+  renderVariationPanel();
+  refreshVariationsFromCloud();
   applyState(loadState());
   syncApplyEffectButtonVisibility();
 });
