@@ -234,31 +234,26 @@
       <input id="page-bg-control" type="color" value="#171717" />
     </label>
 
-    <label class="control">
-      <span>Glow Color</span>
-      <input id="glow-color-control" type="color" value="#ffffff" />
-    </label>
-
     <div class="control-divider" role="separator" aria-hidden="true"></div>
 
-    <p class="control-section-title">Border Glow</p>
+    <p class="control-section-title">Drop Shadow</p>
     <label class="control control-toggle">
-      <span>Border Glow</span>
+      <span>Drop Shadow</span>
       <input id="border-glow-control" type="checkbox" />
     </label>
 
     <label id="border-glow-color-group" class="control">
-      <span>Border Glow Color</span>
+      <span>Shadow Color</span>
       <input id="border-glow-color-control" type="color" value="#ffffff" />
     </label>
 
     <label id="match-border-glow-color-group" class="control control-toggle">
-      <span>Match Glow Colors</span>
+      <span>Match Glow Color</span>
       <input id="match-border-glow-color-control" type="checkbox" checked />
     </label>
 
     <label id="border-glow-size-group" class="control">
-      <span>Border Glow Size: <strong id="border-glow-size-value">18</strong>px</span>
+      <span>Shadow Size: <strong id="border-glow-size-value">18</strong>px</span>
       <input
         id="border-glow-size-control"
         type="range"
@@ -312,7 +307,7 @@
 
     <div class="control-divider" role="separator" aria-hidden="true"></div>
 
-    <p class="control-section-title">Animation</p>
+    <p class="control-section-title">Rotating Glow</p>
     <div class="apply-border-animation-wrap">
       <button
         id="apply-border-animation-effect-button"
@@ -320,16 +315,21 @@
         class="mini-action-button apply-border-animation-effect-button"
         hidden
       >
-        Apply border animation effect
+        Apply rotating glow effect
       </button>
     </div>
     <label class="control">
-      <span>Glow Size: <strong id="glow-size-value">10</strong>%</span>
+      <span>Glow Color</span>
+      <input id="glow-color-control" type="color" value="#ffffff" />
+    </label>
+
+    <label class="control">
+      <span>Arc Width: <strong id="glow-size-value">10</strong>%</span>
       <input id="glow-size-control" type="range" min="2" max="50" value="10" />
     </label>
 
     <label class="control">
-      <span>Glow Speed: <strong id="speed-value">1.0</strong>x</span>
+      <span>Arc Speed: <strong id="speed-value">1.0</strong>x</span>
       <input
         id="speed-control"
         type="range"
@@ -340,9 +340,6 @@
       />
     </label>
 
-    <div class="control-divider" role="separator" aria-hidden="true"></div>
-
-    <p class="control-section-title">Outer Halo</p>
     <label class="control control-toggle">
       <span>Outer Halo</span>
       <input id="halo-enabled-control" type="checkbox" />
